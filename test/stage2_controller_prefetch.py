@@ -1,0 +1,564 @@
+#!/usr/bin/env python3
+"""
+stage2_controller.py
+
+Stage 2 变异循环主控。
+输入: Stage 1 passed 种子（汇编文件 + 跨阶段锁定的变异点）
+度量: target_rate - control_rate (cache side-channel signal)
+目标: 通过变异增大 signal，使瞬态指令成功加载目标数据到缓存
+"""
+
+import os
+import sys
+import re
+import json
+import subprocess
+import shutil
+import logging
+
+from seed_pool import Seed, SeedPool
+from mutation_scheduler import MutationScheduler
+from stage2_evaluator import stage2_evaluate
+
+logger = logging.getLogger("stage2")
+
+
+class Stage2Controller(object):
+    """Stage 2 主控器"""
+
+    def __init__(self, config):
+        self.config = config
+
+        # 所有路径转为绝对路径
+        def _abs(p):
+            if p and not os.path.isabs(p):
+                return os.path.abspath(p)
+            return p
+
+        self.driver_c = _abs(config.get("driver_c", "auto_stage1_2_3_driver.c"))
+        self.stage3_driver_c = _abs(config.get("stage3_driver_c", "stage3_driver_safe.c"))
+
+        self.budget = config.get("budget", 1000)
+        self.work_dir = _abs(config.get("work_dir", "./stage2_work"))
+        self.cc = config.get("cc", "gcc")
+        self.pmu_helper_obj = _abs(config.get("pmu_helper_obj", "pmu_helper_auto.o"))
+        self.pmu_uops_obj = _abs(config.get("pmu_uops_obj", "pmu_uops_rdpmc.o"))
+        self.run_timeout = config.get("run_timeout", 120)
+        self.report_interval = config.get("report_interval", 50)
+        self.trials_per_round = config.get("trials_per_round", 1000)
+
+        # 预编译 stage3_driver_safe.o（只编译一次）
+        self.stage3_obj = os.path.join(self.work_dir, "stage3_driver_safe.o")
+        self._precompile_stage3_obj()
+
+        # anchors
+        self.anchors = []
+        self.strong_objects = []
+        anchors_path = _abs(config.get("anchors_json"))
+        if anchors_path and os.path.exists(anchors_path):
+            with open(anchors_path) as f:
+                self.anchors = json.load(f)
+            logger.info("Loaded {} anchors from {}".format(
+                len(self.anchors), anchors_path))
+
+        strong_obj_path = _abs(config.get("strong_objects_json"))
+        if strong_obj_path and os.path.exists(strong_obj_path):
+            with open(strong_obj_path) as f:
+                self.strong_objects = json.load(f)
+            logger.info("Loaded {} strong objects".format(
+                len(self.strong_objects)))
+
+        self.scheduler = MutationScheduler(
+            self.anchors, self.strong_objects, stage=2
+        )
+        self.seed_pool = SeedPool(
+            max_size=config.get("pool_size", 200),
+            stage_name="stage2"
+        )
+
+        os.makedirs(self.work_dir, exist_ok=True)
+        self.passed_seeds = []
+
+    def _precompile_stage3_obj(self):
+        """预编译 stage3_driver_safe.c → .o"""
+        os.makedirs(self.work_dir, exist_ok=True)
+
+        if not os.path.exists(self.stage3_driver_c):
+            logger.warning("stage3_driver_safe.c not found: {}".format(
+                self.stage3_driver_c))
+            self.stage3_obj = None
+            return
+
+        r = subprocess.run(
+            [self.cc, "-c", "-O0", self.stage3_driver_c, "-o", self.stage3_obj],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30
+        )
+        if r.returncode != 0:
+            logger.warning("stage3_driver_safe.c compile failed: {}".format(
+                r.stderr.decode("utf-8", errors="ignore")[:300]))
+            self.stage3_obj = None
+        else:
+            logger.info("Pre-compiled stage3_driver_safe.o: {}".format(
+                self.stage3_obj))
+
+    # =========================================================
+    # 主流程
+    # =========================================================
+
+    def run(self, stage1_passed_seeds):
+        """执行 Stage 2 完整流程"""
+        logger.info("=" * 60)
+        logger.info("Stage 2: Initialization")
+        logger.info("=" * 60)
+
+        # Stage 1 passed → Stage 2 种子
+        stage2_seeds = []
+        for s1_seed in stage1_passed_seeds:
+            s2_seed = s1_seed.create_child_for_next_stage()
+            stage2_seeds.append(s2_seed)
+            locked = s1_seed.cross_stage_locked_pcs | s1_seed.current_stage_mutated_pcs
+            logger.info("Stage1 seed id={}, score={:.4f}, locked_pcs={} "
+                        "-> Stage2 seed id={}".format(
+                            s1_seed.id, s1_seed.score, locked, s2_seed.id))
+
+        if not stage2_seeds:
+            logger.error("No Stage 1 passed seeds to process")
+            return []
+
+        # 基线评估
+        logger.info("=" * 60)
+        logger.info("Stage 2: Collecting baselines for {} seeds".format(
+            len(stage2_seeds)))
+        logger.info("=" * 60)
+
+        for seed in stage2_seeds:
+            eval_result = self._evaluate_seed(seed,
+                                              tag="s2_base_{}".format(seed.id))
+            if eval_result is None:
+                logger.warning("Baseline eval failed for seed {}".format(seed.id))
+                continue
+
+            seed.score = eval_result["score"]
+            seed.eval_detail = eval_result
+            self.seed_pool.add(seed)
+
+            logger.info(
+                "  Seed {}: score={:.4f}, signal={:.4f}, "
+                "target_rate={:.4f}, control_rate={:.4f}, passed={}"
+                .format(seed.id, eval_result["score"],
+                        eval_result["mean_signal"],
+                        eval_result["mean_target_rate"],
+                        eval_result["mean_control_rate"],
+                        eval_result["passed"]))
+
+            if eval_result["passed"]:
+                self.passed_seeds.append(seed)
+                logger.info("  >>> Already passes Stage 2! <<<")
+
+        if not self.seed_pool.seeds:
+            logger.error("No seeds survived baseline evaluation")
+            return []
+
+        # 变异循环
+        logger.info("=" * 60)
+        logger.info("Stage 2: Mutation loop (budget={})".format(self.budget))
+        logger.info("=" * 60)
+
+        for round_idx in range(self.budget):
+            self._mutation_round(round_idx)
+
+            if (round_idx + 1) % self.report_interval == 0:
+                self._report_stats(round_idx + 1)
+
+        logger.info("=" * 60)
+        logger.info("Stage 2 complete: {} passed seeds".format(
+            len(self.passed_seeds)))
+        self._report_stats(self.budget)
+
+        if not self.passed_seeds:
+            logger.info("No passed seeds. Pipeline terminates.")
+
+        return self.passed_seeds
+
+    # =========================================================
+    # 变异轮
+    # =========================================================
+
+    def _mutation_round(self, round_idx):
+        seed = self.seed_pool.select()
+        if seed is None:
+            return
+
+        excluded = seed.get_excluded_pcs()
+        anchor = self.scheduler.select_anchor(
+            cross_stage_locked_pcs=excluded)
+        if anchor is None:
+            return
+
+        result = self.scheduler.apply_mutation(
+            seed.asm_path, anchor, self.work_dir)
+        if result is None:
+            return
+        mutant_path, mutation_info = result
+
+        anchor_pc = mutation_info["anchor_pc"]
+        new_history = seed.mutation_history + [mutation_info]
+
+        mutant_seed = Seed(
+            asm_path=mutant_path,
+            cross_stage_locked_pcs=seed.cross_stage_locked_pcs,
+            mutation_history=new_history,
+            parent_id=seed.id,
+        )
+        mutant_seed.current_stage_mutated_pcs = set(
+            seed.current_stage_mutated_pcs)
+        mutant_seed.record_mutation(anchor_pc)
+
+        eval_result = self._evaluate_seed(
+            mutant_seed, tag="s2_r{}".format(round_idx))
+        if eval_result is None:
+            self._cleanup_mutant(mutant_path)
+            return
+
+        mutant_seed.score = eval_result["score"]
+        mutant_seed.eval_detail = eval_result
+
+        if eval_result["passed"]:
+            self.passed_seeds.append(mutant_seed)
+            logger.info(
+                "Round {}: >>> PASSED <<< score={:.4f}, signal={:.4f}, "
+                "target={:.4f}, control={:.4f}, anchor={}"
+                .format(round_idx, eval_result["score"],
+                        eval_result["mean_signal"],
+                        eval_result["mean_target_rate"],
+                        eval_result["mean_control_rate"],
+                        anchor_pc))
+
+        if self.seed_pool.should_admit(eval_result["score"]):
+            admitted = self.seed_pool.add(mutant_seed)
+            if admitted:
+                seed.children_produced += 1
+        else:
+            self.seed_pool.total_rejected += 1
+            self._cleanup_mutant(mutant_path)
+
+    # =========================================================
+    # 评估：编译 → 运行 → 解析
+    # =========================================================
+
+    # 在 stage2_controller.py 中，替换 _evaluate_seed，新增 _remove_stage1_instrumentation
+
+    def _evaluate_seed(self, seed, tag="eval"):
+        """编译、运行、评估 Stage 2"""
+        try:
+            with open(seed.asm_path, "r") as f:
+                asm_lines = f.readlines()
+
+            # Stage 2 不做 Stage 1 插桩，反而要移除已有插桩
+            cleaned_lines = self._remove_stage1_instrumentation(asm_lines)
+
+            # 剥离 main
+            stripped_lines = self._strip_main_function(cleaned_lines)
+
+            # 写出
+            out_dir = os.path.join(self.work_dir, tag)
+            os.makedirs(out_dir, exist_ok=True)
+            processed_s = os.path.join(out_dir, "victim_processed.s")
+            with open(processed_s, "w") as f:
+                f.writelines(stripped_lines)
+
+            # 编译
+            exe_path = self._compile_stage2(processed_s, out_dir, tag)
+            if exe_path is None:
+                return None
+
+            # 运行
+            log_lines = self._run_executable(exe_path, tag)
+            if log_lines is None:
+                return None
+
+            # 评估
+            return stage2_evaluate(log_lines)
+
+        except subprocess.TimeoutExpired:
+            logger.debug("[{}] Timeout".format(tag))
+            return None
+        except Exception as e:
+            logger.debug("[{}] Evaluation error: {}".format(tag, e))
+            return None
+
+    def _remove_stage1_instrumentation(self, asm_lines):
+        """移除 Stage 1 在汇编中插入的 PMU 插桩代码"""
+        result = []
+        stage1_calls = [
+            "pmu_stage1_before",
+            "pmu_stage1_after",
+            "pmu_uops_snap_before",
+            "pmu_uops_snap_after",
+            "pmu_stage1_get_count",
+            "pmu_stage1_get_delta",
+        ]
+
+        stage1_markers = [
+            "STAGE1_PMU_BEGIN",
+            "STAGE1_PMU_END",
+            "STAGE1_UOPS_BEGIN",
+            "STAGE1_UOPS_END",
+            "# [stage1",
+            "# --- PMU",
+            "# --- UOPS",
+        ]
+
+        for line in asm_lines:
+            stripped = line.strip()
+
+            is_stage1_call = False
+            for func in stage1_calls:
+                if "call" in stripped and func in stripped:
+                    is_stage1_call = True
+                    break
+
+            if is_stage1_call:
+                result.append("# [s2-removed] {}\n".format(stripped))
+                continue
+
+            is_stage1_marker = False
+            for marker in stage1_markers:
+                if marker in stripped:
+                    is_stage1_marker = True
+                    break
+
+            if is_stage1_marker:
+                result.append("# [s2-removed] {}\n".format(stripped))
+                continue
+
+            result.append(line)
+
+        removed = sum(1 for l in result if l.startswith("# [s2-removed]"))
+        if removed > 0:
+            logger.debug("Removed {} Stage 1 instrumentation lines".format(removed))
+
+        return result
+
+    def _strip_main_function(self, asm_lines):
+        """
+        从汇编中剥离 main 函数体，保留 vf_* 等其他函数。
+
+        GCC -S 输出的典型结构:
+            .globl  main
+            .type   main, @function
+          main:
+          .LFB...:
+              pushq %rbp
+              ...
+              ret
+          .LFE...:
+              .size  main, .-main
+
+        剥离策略:
+          - 注释掉 .globl main / .type main / main: / .size main
+          - 注释掉 main 函数体内的所有行
+          - 遇到 .size main 或下一个非 main 的 .globl 时停止
+        """
+        result = []
+        in_main = False
+
+        for line in asm_lines:
+            stripped = line.strip()
+
+            # .globl main
+            if re.match(r'^\s*\.glob[al]+\s+main\s*$', stripped):
+                result.append("# [s2-strip] " + line)
+                continue
+
+            # .type main, @function
+            if re.match(r'^\s*\.type\s+main\s*,\s*@function', stripped):
+                result.append("# [s2-strip] " + line)
+                continue
+
+            # main: 标签
+            if re.match(r'^main\s*:', stripped):
+                in_main = True
+                result.append("# [s2-strip] " + line)
+                continue
+
+            # .size main, .-main（main 结束标记）
+            if in_main and re.match(r'^\s*\.size\s+main\s*,', stripped):
+                result.append("# [s2-strip] " + line)
+                in_main = False
+                continue
+
+            # 在 main 内部
+            if in_main:
+                # 遇到新函数开始 → main 结束
+                if (re.match(r'^\s*\.glob[al]+\s+\w', stripped) and
+                        'main' not in stripped):
+                    in_main = False
+                    result.append(line)
+                    continue
+                if (re.match(r'^\s*\.type\s+\w+\s*,\s*@function', stripped) and
+                        'main' not in stripped):
+                    in_main = False
+                    result.append(line)
+                    continue
+
+                # 注释掉 main 内部代码
+                result.append("# [s2-strip] " + line)
+                continue
+
+            # 不在 main 内部，保留
+            result.append(line)
+
+        return result
+
+    def _compile_stage2(self, victim_s, out_dir, tag):
+        """
+        Stage 2 编译链:
+          gcc -c victim_processed.s         → victim.o
+          gcc -c auto_stage1_2_3_driver.c   → driver.o
+          gcc victim.o driver.o pmu_helper_auto.o stage3_driver_safe.o → exe
+        """
+        victim_o = os.path.join(out_dir, "victim.o")
+        driver_o = os.path.join(out_dir, "driver.o")
+        exe_path = os.path.join(out_dir, "stage2_exe")
+
+        # 1. 编译 victim
+        r1 = subprocess.run(
+            [self.cc, "-c", victim_s, "-o", victim_o],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        if r1.returncode != 0:
+            logger.debug("[{}] Victim asm failed: {}".format(
+                tag, r1.stderr.decode("utf-8", errors="ignore")[:300]))
+            return None
+
+        # 2. 编译 driver
+        r2 = subprocess.run(
+            [self.cc, "-c", "-O0", self.driver_c, "-o", driver_o],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        if r2.returncode != 0:
+            logger.debug("[{}] Driver compile failed: {}".format(
+                tag, r2.stderr.decode("utf-8", errors="ignore")[:300]))
+            return None
+
+        # 3. 链接
+        link_cmd = [self.cc, victim_o, driver_o, self.pmu_helper_obj]
+
+        # stage3_driver_safe.o
+        if self.stage3_obj and os.path.exists(self.stage3_obj):
+            link_cmd.append(self.stage3_obj)
+
+        # pmu_uops (可选)
+        if self.pmu_uops_obj and os.path.exists(self.pmu_uops_obj):
+            link_cmd.append(self.pmu_uops_obj)
+
+        link_cmd += ["-o", exe_path]
+
+        logger.debug("[{}] Link: {}".format(tag, " ".join(link_cmd)))
+
+        r3 = subprocess.run(
+            link_cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        if r3.returncode != 0:
+            logger.debug("[{}] Link failed: {}".format(
+                tag, r3.stderr.decode("utf-8", errors="ignore")[:500]))
+            return None
+
+        return exe_path
+    
+    """
+    def _run_executable(self, exe_path, tag):
+        """"""运行 Stage 2 可执行文件""""""
+        try:
+            env = os.environ.copy()
+            env["ENABLE_STAGE3"] = "0"  # Stage 2 不启用 Stage 3
+
+            result = subprocess.run(
+                [exe_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=self.run_timeout, env=env)
+
+            if result.returncode != 0:
+                stderr_text = result.stderr.decode("utf-8", errors="ignore")[:200]
+                logger.debug("[{}] Execution failed: rc={}, stderr={}".format(
+                    tag, result.returncode, stderr_text))
+                return None
+
+            output = result.stdout.decode("utf-8", errors="ignore")
+            lines = output.splitlines()
+            if not lines:
+                return None
+            return lines
+
+        except subprocess.TimeoutExpired:
+            return None
+        except Exception as e:
+            logger.debug("[{}] Run error: {}".format(tag, e))
+            return None
+    """
+
+    def _run_executable(self, exe_path, tag):
+        """运行 Stage 2 可执行文件"""
+        try:
+            env = os.environ.copy()
+            env["ENABLE_STAGE3"] = "0"
+
+            result = subprocess.run(
+                [exe_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=self.run_timeout, env=env)
+
+            if result.returncode != 0:
+                stderr_text = result.stderr.decode("utf-8", errors="ignore")[:500]
+                logger.debug("[{}] Execution failed: rc={}, stderr={}".format(
+                    tag, result.returncode, stderr_text))
+                return None
+
+            # ✅ 新增：打印 stderr 中的诊断信息（[CAND]、[vf_init]、[Driver]）
+            stderr_text = result.stderr.decode("utf-8", errors="ignore")
+            for line in stderr_text.splitlines():
+                if any(line.startswith(prefix) for prefix in 
+                    ["[CAND]", "[vf_init]", "[Driver]", "===", "Expected", "PoC"]):
+                    logger.info("[{}] {}".format(tag, line))
+
+            output = result.stdout.decode("utf-8", errors="ignore")
+            lines = output.splitlines()
+            if not lines:
+                return None
+            return lines
+
+        except subprocess.TimeoutExpired:
+            return None
+        except Exception as e:
+            logger.debug("[{}] Run error: {}".format(tag, e))
+            return None
+
+    def _cleanup_mutant(self, mutant_path):
+        try:
+            d = os.path.dirname(mutant_path)
+            if "mutant_" in os.path.basename(d):
+                shutil.rmtree(d, ignore_errors=True)
+        except Exception:
+            pass
+
+    def _report_stats(self, round_num):
+        stats = self.seed_pool.stats()
+        logger.info(
+            "Round {}/{}: pool={}, passed={}, added={}, evicted={}, "
+            "rejected={}, avg={:.4f}, max={:.4f}, min={:.4f}"
+            .format(round_num, self.budget,
+                    stats["size"], len(self.passed_seeds),
+                    stats["total_added"], stats["total_evicted"],
+                    stats["total_rejected"],
+                    stats["avg_score"], stats["max_score"],
+                    stats["min_score"]))
+        best = self.seed_pool.get_best_seed()
+        if best and best.eval_detail:
+            ed = best.eval_detail
+            logger.info(
+                "  Best: id={}, score={:.4f}, signal={:.4f}, "
+                "target={:.4f}, control={:.4f}".format(
+                    best.id, best.score,
+                    ed.get("mean_signal", 0),
+                    ed.get("mean_target_rate", 0),
+                    ed.get("mean_control_rate", 0)))

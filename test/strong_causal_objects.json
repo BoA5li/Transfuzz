@@ -1,0 +1,2815 @@
+[
+    {
+      "object_id": "imm_occurrence:0x4009ba:operand_imm:1:0x20:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009ba"
+      ],
+      "representative_disasm": [
+        "0x4009ba: shl rax, 0x20"
+      ],
+      "related_anchor_pcs": [
+        "0x4009ba"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x4009f2:operand_imm:1:0x2:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009f2"
+      ],
+      "representative_disasm": [
+        "0x4009f2: mov byte ptr [rbp - 1], 2"
+      ],
+      "related_anchor_pcs": [
+        "0x4009f2"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x4009fd:operand_imm:1:0x4:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009fd"
+      ],
+      "representative_disasm": [
+        "0x4009fd: shl rax, 4"
+      ],
+      "related_anchor_pcs": [
+        "0x4009fd"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400a0f:operand_imm:1:0x3:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a0f"
+      ],
+      "representative_disasm": [
+        "0x400a0f: shr rax, 3"
+      ],
+      "related_anchor_pcs": [
+        "0x400a0f"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400a21:operand_imm:1:0x1:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a21"
+      ],
+      "representative_disasm": [
+        "0x400a21: shr rax, 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400a21"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400a51:operand_imm:1:0x6:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a51"
+      ],
+      "representative_disasm": [
+        "0x400a51: shl eax, 6"
+      ],
+      "related_anchor_pcs": [
+        "0x400a51"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400a81:operand_imm:1:0x0:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a81"
+      ],
+      "representative_disasm": [
+        "0x400a81: mov qword ptr [rbp - 8], 0"
+      ],
+      "related_anchor_pcs": [
+        "0x400a81"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400a8e:operand_imm:1:0x0:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a8e"
+      ],
+      "representative_disasm": [
+        "0x400a8e: mov qword ptr [rbp - 0x10], 0"
+      ],
+      "related_anchor_pcs": [
+        "0x400a8e"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400a9c:operand_imm:1:0x6:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a9c"
+      ],
+      "representative_disasm": [
+        "0x400a9c: shl rax, 6"
+      ],
+      "related_anchor_pcs": [
+        "0x400a9c"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400ab5:operand_imm:1:0x1:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400ab5"
+      ],
+      "representative_disasm": [
+        "0x400ab5: add qword ptr [rbp - 0x10], 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400ab5"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400aba:operand_imm:1:0xff:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "loop_bound_constant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant"
+      ],
+      "direct_semantic_roles": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant",
+        "near_seed_path",
+        "comparison_operand",
+        "comparison_related",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "直接参与比较",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400aba"
+      ],
+      "representative_disasm": [
+        "0x400aba: cmp qword ptr [rbp - 0x10], 0xff"
+      ],
+      "related_anchor_pcs": [
+        "0x400aba"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400ac4:operand_imm:1:0xa:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400ac4"
+      ],
+      "representative_disasm": [
+        "0x400ac4: mov qword ptr [rbp - 0x18], 0xa"
+      ],
+      "related_anchor_pcs": [
+        "0x400ac4"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400adc:operand_imm:1:0x0:i32",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400adc"
+      ],
+      "representative_disasm": [
+        "0x400adc: mov edx, 0"
+      ],
+      "related_anchor_pcs": [
+        "0x400adc"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400aec:operand_imm:1:0x2e8ba2e8ba2e8ba3:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400aec"
+      ],
+      "representative_disasm": [
+        "0x400aec: movabs rdx, 0x2e8ba2e8ba2e8ba3"
+      ],
+      "related_anchor_pcs": [
+        "0x400aec"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400afc:operand_imm:1:0x1:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400afc"
+      ],
+      "representative_disasm": [
+        "0x400afc: sar rdx, 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400afc"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400b02:operand_imm:1:0x3f:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b02"
+      ],
+      "representative_disasm": [
+        "0x400b02: sar rax, 0x3f"
+      ],
+      "related_anchor_pcs": [
+        "0x400b02"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400b0c:operand_imm:1:0x2:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b0c"
+      ],
+      "representative_disasm": [
+        "0x400b0c: shl rax, 2"
+      ],
+      "related_anchor_pcs": [
+        "0x400b0c"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400b23:operand_imm:1:0x0:i16",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b23"
+      ],
+      "representative_disasm": [
+        "0x400b23: mov ax, 0"
+      ],
+      "related_anchor_pcs": [
+        "0x400b23"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400b2f:operand_imm:1:0x10:i8",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "backward 叶子节点",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b2f"
+      ],
+      "representative_disasm": [
+        "0x400b2f: shr rax, 0x10"
+      ],
+      "related_anchor_pcs": [
+        "0x400b2f"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "imm_occurrence:0x400b4b:operand_imm:1:0x0:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "generic_mutable_object",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b4b"
+      ],
+      "representative_disasm": [
+        "0x400b4b: mov qword ptr [rbp - 0x20], 0"
+      ],
+      "related_anchor_pcs": [
+        "0x400b4b"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400b55:operand_imm:1:0x1:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b55"
+      ],
+      "representative_disasm": [
+        "0x400b55: add qword ptr [rbp - 0x20], 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400b55"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400b5a:operand_imm:1:0x1d:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "loop_bound_constant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant"
+      ],
+      "direct_semantic_roles": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant",
+        "near_seed_path",
+        "comparison_operand",
+        "comparison_related",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "直接参与比较",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b5a"
+      ],
+      "representative_disasm": [
+        "0x400b5a: cmp qword ptr [rbp - 0x20], 0x1d"
+      ],
+      "related_anchor_pcs": [
+        "0x400b5a"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400b6d:operand_imm:1:0x1:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b6d"
+      ],
+      "representative_disasm": [
+        "0x400b6d: sub qword ptr [rbp - 0x18], 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400b6d"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400b72:operand_imm:1:0x0:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "loop_bound_constant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant"
+      ],
+      "direct_semantic_roles": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant",
+        "near_seed_path",
+        "comparison_operand",
+        "comparison_related",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "直接参与比较",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b72"
+      ],
+      "representative_disasm": [
+        "0x400b72: cmp qword ptr [rbp - 0x18], 0"
+      ],
+      "related_anchor_pcs": [
+        "0x400b72"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400b7d:operand_imm:1:0x1:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "store_constant",
+        "program_semantic_constant"
+      ],
+      "direct_semantic_roles": [
+        "store_constant",
+        "program_semantic_constant",
+        "near_seed_path",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b7d"
+      ],
+      "representative_disasm": [
+        "0x400b7d: add qword ptr [rbp - 8], 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400b7d"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "imm_occurrence:0x400b82:operand_imm:1:0x9:i64",
+      "object_type": "imm_occurrence",
+      "causal_role_class": "loop_bound_constant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "immediate_value_mutation"
+      ],
+      "semantic_tags": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant"
+      ],
+      "direct_semantic_roles": [
+        "program_semantic_constant",
+        "comparison_constant",
+        "loop_bound_constant",
+        "near_seed_path",
+        "comparison_operand",
+        "comparison_related",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "backward_leaf"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "backward 叶子节点",
+        "直接参与比较",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "backward 叶子节点，上游根候选",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b82"
+      ],
+      "representative_disasm": [
+        "0x400b82: cmp qword ptr [rbp - 8], 9"
+      ],
+      "related_anchor_pcs": [
+        "0x400b82"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "reg:rax",
+      "object_type": "reg",
+      "causal_role_class": "comparison_participant",
+      "direct_mutation_preferred": false,
+      "deletion_candidate_only": true,
+      "recommended_actions": [
+        "containing_instruction_deletion",
+        "containing_instruction_operand_mutation"
+      ],
+      "semantic_tags": [
+        "address_base",
+        "address_index"
+      ],
+      "direct_semantic_roles": [
+        "address_base",
+        "address_index",
+        "near_seed_path",
+        "address_related",
+        "memory_related",
+        "value_defined",
+        "arithmetic_related",
+        "comparison_operand",
+        "comparison_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 1",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与地址形成",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 1",
+        "直接参与比较",
+        "参与地址形成",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 1",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与地址形成",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4008cd",
+        "0x4009ae",
+        "0x4009b7",
+        "0x4009ba",
+        "0x4009be"
+      ],
+      "representative_disasm": [
+        "0x4008cd: push rax",
+        "0x4009b7: mov eax, dword ptr [rbp - 8]",
+        "0x4009ba: shl rax, 0x20"
+      ],
+      "related_anchor_pcs": [
+        "0x4009b7",
+        "0x4009ba",
+        "0x4009be",
+        "0x4009d1",
+        "0x4009d5",
+        "0x4009f6",
+        "0x4009fd",
+        "0x400a01",
+        "0x400a08",
+        "0x400a0f",
+        "0x400a13",
+        "0x400a1a",
+        "0x400a21",
+        "0x400a24",
+        "0x400a30",
+        "0x400a37",
+        "0x400a44",
+        "0x400a48",
+        "0x400a4b",
+        "0x400a4e",
+        "0x400a51",
+        "0x400a54",
+        "0x400a57",
+        "0x400a5e",
+        "0x400a62",
+        "0x400a98",
+        "0x400a9c",
+        "0x400aa0",
+        "0x400aa3",
+        "0x400aaa",
+        "0x400aad",
+        "0x400ad8",
+        "0x400ae1",
+        "0x400af6",
+        "0x400af9",
+        "0x400aff",
+        "0x400b02",
+        "0x400b06",
+        "0x400b09",
+        "0x400b0c",
+        "0x400b10",
+        "0x400b13",
+        "0x400b16",
+        "0x400b19",
+        "0x400b1f",
+        "0x400b23",
+        "0x400b27",
+        "0x400b2b",
+        "0x400b2f",
+        "0x400b33",
+        "0x400b37",
+        "0x400b3b",
+        "0x400b3f",
+        "0x400b43",
+        "0x400b47",
+        "0x400b61",
+        "0x400b65",
+        "0x400c46",
+        "0x400c4d",
+        "0x400c50",
+        "0x400c57",
+        "0x400c5a",
+        "0x400c5d",
+        "0x400c61",
+        "0x400c65",
+        "0x4013e4",
+        "0x4013ea",
+        "0x401457",
+        "0x40145d"
+      ],
+      "contextual_related_pcs": [
+        "0x4008cd",
+        "0x4009ae",
+        "0x4009c1",
+        "0x4009c4",
+        "0x4009d9",
+        "0x400a6f",
+        "0x400c72",
+        "0x400ca5",
+        "0x400ca8",
+        "0x400cb2",
+        "0x400de5",
+        "0x401605",
+        "0x40160b"
+      ],
+      "source_refs": [],
+      "backward_distance": 1
+    },
+    {
+      "object_id": "reg:rcx",
+      "object_type": "reg",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": false,
+      "deletion_candidate_only": true,
+      "recommended_actions": [
+        "containing_instruction_deletion",
+        "containing_instruction_operand_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4008d6",
+        "0x4009b4",
+        "0x400ad1",
+        "0x400ae1",
+        "0x400ae8"
+      ],
+      "representative_disasm": [
+        "0x400ad1: mov rcx, qword ptr [rip + 0x2025f0]",
+        "0x400ae1: div rcx",
+        "0x400ae8: mov rcx, qword ptr [rbp - 0x18]"
+      ],
+      "related_anchor_pcs": [
+        "0x400ad1",
+        "0x400ae1",
+        "0x400ae8",
+        "0x400af6",
+        "0x400aff",
+        "0x400b19",
+        "0x400b1c"
+      ],
+      "contextual_related_pcs": [
+        "0x4008d6",
+        "0x4009b4"
+      ],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "reg:rdi",
+      "object_type": "reg",
+      "causal_role_class": "register_carrier",
+      "direct_mutation_preferred": false,
+      "deletion_candidate_only": true,
+      "recommended_actions": [
+        "containing_instruction_deletion",
+        "containing_instruction_operand_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4008dd",
+        "0x4009cd",
+        "0x4009ee",
+        "0x400a7d",
+        "0x400aad"
+      ],
+      "representative_disasm": [
+        "0x4008dd: mov rdi, 0x400c37",
+        "0x4009cd: mov qword ptr [rbp - 0x18], rdi",
+        "0x4009ee: mov qword ptr [rbp - 0x18], rdi"
+      ],
+      "related_anchor_pcs": [
+        "0x4009cd",
+        "0x4009ee",
+        "0x400a7d",
+        "0x400aad",
+        "0x400b65",
+        "0x400c65"
+      ],
+      "contextual_related_pcs": [
+        "0x4008dd",
+        "0x400c3f"
+      ],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "reg:rdx",
+      "object_type": "reg",
+      "causal_role_class": "arithmetic_participant",
+      "direct_mutation_preferred": false,
+      "deletion_candidate_only": true,
+      "recommended_actions": [
+        "containing_instruction_deletion",
+        "containing_instruction_operand_mutation"
+      ],
+      "semantic_tags": [
+        "address_base"
+      ],
+      "direct_semantic_roles": [
+        "address_base",
+        "near_seed_path",
+        "value_defined",
+        "address_related",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 1",
+        "有稳定的用户代码变异锚点",
+        "参与地址形成",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 1",
+        "参与地址形成",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 1",
+        "有稳定的用户代码变异锚点",
+        "参与地址形成",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4008c2",
+        "0x4008c6",
+        "0x4009b1",
+        "0x4009be",
+        "0x4009c4"
+      ],
+      "representative_disasm": [
+        "0x4009b1: mov dword ptr [rbp - 8], edx",
+        "0x4009be: mov rdx, rax",
+        "0x400a3d: lea rdx, [rip + 0x20269c]"
+      ],
+      "related_anchor_pcs": [
+        "0x4009b1",
+        "0x4009be",
+        "0x400a3d",
+        "0x400a48",
+        "0x400a54",
+        "0x400a5e",
+        "0x400aa0",
+        "0x400aaa",
+        "0x400adc",
+        "0x400ae1",
+        "0x400ae4",
+        "0x400aec",
+        "0x400af9",
+        "0x400afc",
+        "0x400b06",
+        "0x400b09",
+        "0x400b10",
+        "0x400b16",
+        "0x400b1c",
+        "0x400b1f",
+        "0x400c4d",
+        "0x400c57",
+        "0x400c5a"
+      ],
+      "contextual_related_pcs": [
+        "0x4008c2",
+        "0x4008c6",
+        "0x4009c4"
+      ],
+      "source_refs": [],
+      "backward_distance": 1
+    },
+    {
+      "object_id": "reg:rsi",
+      "object_type": "reg",
+      "causal_role_class": "register_carrier",
+      "direct_mutation_preferred": false,
+      "deletion_candidate_only": true,
+      "recommended_actions": [
+        "containing_instruction_deletion",
+        "containing_instruction_operand_mutation"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4008c5",
+        "0x400c42"
+      ],
+      "representative_disasm": [
+        "0x4008c5: pop rsi",
+        "0x400c42: mov qword ptr [rbp - 0x30], rsi"
+      ],
+      "related_anchor_pcs": [
+        "0x400c42"
+      ],
+      "contextual_related_pcs": [
+        "0x4008c5"
+      ],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "stack:[rbp-0x10]",
+      "object_type": "stack",
+      "causal_role_class": "comparison_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined",
+        "comparison_operand",
+        "comparison_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "直接参与比较",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a8e",
+        "0x400a98",
+        "0x400ab5",
+        "0x400aba",
+        "0x400c5d"
+      ],
+      "representative_disasm": [
+        "0x400a8e: mov qword ptr [rbp - 0x10], 0",
+        "0x400a98: mov rax, qword ptr [rbp - 0x10]",
+        "0x400ab5: add qword ptr [rbp - 0x10], 1"
+      ],
+      "related_anchor_pcs": [
+        "0x400a8e",
+        "0x400a98",
+        "0x400ab5",
+        "0x400aba",
+        "0x400c5d",
+        "0x400c61"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "stack:[rbp-0x18]",
+      "object_type": "stack",
+      "causal_role_class": "comparison_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined",
+        "arithmetic_related",
+        "comparison_operand",
+        "comparison_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "直接参与比较",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009cd",
+        "0x4009d1",
+        "0x4009ee",
+        "0x400a37",
+        "0x400a44"
+      ],
+      "representative_disasm": [
+        "0x4009cd: mov qword ptr [rbp - 0x18], rdi",
+        "0x4009d1: mov rax, qword ptr [rbp - 0x18]",
+        "0x4009ee: mov qword ptr [rbp - 0x18], rdi"
+      ],
+      "related_anchor_pcs": [
+        "0x4009cd",
+        "0x4009d1",
+        "0x4009ee",
+        "0x400a37",
+        "0x400a44",
+        "0x400ac4",
+        "0x400ae8",
+        "0x400b6d",
+        "0x400b72"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "stack:[rbp-0x20]",
+      "object_type": "stack",
+      "causal_role_class": "comparison_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined",
+        "arithmetic_related",
+        "comparison_operand",
+        "comparison_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3",
+        "直接参与比较",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400b4b",
+        "0x400b55",
+        "0x400b5a"
+      ],
+      "representative_disasm": [
+        "0x400b4b: mov qword ptr [rbp - 0x20], 0",
+        "0x400b55: add qword ptr [rbp - 0x20], 1",
+        "0x400b5a: cmp qword ptr [rbp - 0x20], 0x1d"
+      ],
+      "related_anchor_pcs": [
+        "0x400b4b",
+        "0x400b55",
+        "0x400b5a"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "stack:[rbp-0x28]",
+      "object_type": "stack",
+      "causal_role_class": "stack_variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "call_related",
+        "value_defined",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009c8",
+        "0x400a2b",
+        "0x400a65",
+        "0x400a6a",
+        "0x400ae4"
+      ],
+      "representative_disasm": [
+        "0x4009c8: ret",
+        "0x400a2b: call 0x4013e0",
+        "0x400a65: call 0x40144f"
+      ],
+      "related_anchor_pcs": [
+        "0x4009c8",
+        "0x400a2b",
+        "0x400a65",
+        "0x400a6a",
+        "0x400ae4",
+        "0x400b3b",
+        "0x400b43",
+        "0x40144e",
+        "0x401565"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "stack:[rbp-0x30]",
+      "object_type": "stack",
+      "causal_role_class": "stack_variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "value_defined",
+        "memory_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009a7",
+        "0x4009c7",
+        "0x400b27",
+        "0x400b2b",
+        "0x400b33"
+      ],
+      "representative_disasm": [
+        "0x4009a7: push rbp",
+        "0x4009c7: pop rbp",
+        "0x400b27: mov qword ptr [rbp - 0x30], rax"
+      ],
+      "related_anchor_pcs": [
+        "0x4009a7",
+        "0x4009c7",
+        "0x400b27",
+        "0x400b2b",
+        "0x400b33",
+        "0x400b3f",
+        "0x400b47",
+        "0x400b61",
+        "0x400c42",
+        "0x4013e0",
+        "0x40144d",
+        "0x40144f",
+        "0x401564"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "stack:[rbp-0x38]",
+      "object_type": "stack",
+      "causal_role_class": "stack_variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "call_related",
+        "value_defined",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a7d",
+        "0x400b37",
+        "0x400b8f",
+        "0x400c68",
+        "0x400c6d"
+      ],
+      "representative_disasm": [
+        "0x400a7d: mov qword ptr [rbp - 0x38], rdi",
+        "0x400b37: mov rax, qword ptr [rbp - 0x38]",
+        "0x400c68: call 0x400a75"
+      ],
+      "related_anchor_pcs": [
+        "0x400a7d",
+        "0x400b37",
+        "0x400c68"
+      ],
+      "contextual_related_pcs": [
+        "0x400b8f",
+        "0x400c6d",
+        "0x400cad",
+        "0x400dec",
+        "0x401616"
+      ],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "stack:[rbp-0x40]",
+      "object_type": "stack",
+      "causal_role_class": "stack_variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "value_defined"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a75",
+        "0x400b8e",
+        "0x400de1",
+        "0x400deb",
+        "0x401566"
+      ],
+      "representative_disasm": [
+        "0x400a75: push rbp"
+      ],
+      "related_anchor_pcs": [
+        "0x400a75"
+      ],
+      "contextual_related_pcs": [
+        "0x400b8e",
+        "0x400de1",
+        "0x400deb",
+        "0x401566",
+        "0x401615"
+      ],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "stack:[rbp-0x48]",
+      "object_type": "stack",
+      "causal_role_class": "stack_variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "call_related",
+        "value_defined"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009e5",
+        "0x400a74",
+        "0x400ab0",
+        "0x400b68"
+      ],
+      "representative_disasm": [
+        "0x4009e5: ret",
+        "0x400a74: ret",
+        "0x400ab0: call 0x4009c9"
+      ],
+      "related_anchor_pcs": [
+        "0x4009e5",
+        "0x400a74",
+        "0x400ab0",
+        "0x400b68"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "stack:[rbp-0x50]",
+      "object_type": "stack",
+      "causal_role_class": "stack_variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "value_defined"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 3"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 3",
+        "有稳定的用户代码变异锚点",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009c9",
+        "0x4009e4",
+        "0x4009e6",
+        "0x400a73"
+      ],
+      "representative_disasm": [
+        "0x4009c9: push rbp",
+        "0x4009e4: pop rbp",
+        "0x4009e6: push rbp"
+      ],
+      "related_anchor_pcs": [
+        "0x4009c9",
+        "0x4009e4",
+        "0x4009e6",
+        "0x400a73"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 3
+    },
+    {
+      "object_id": "stack:[rbp-0x8]",
+      "object_type": "stack",
+      "causal_role_class": "comparison_participant",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined",
+        "comparison_operand",
+        "comparison_related",
+        "arithmetic_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "直接参与比较",
+        "参与内存操作",
+        "参与算术运算"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与比较/条件判断",
+        "参与内存读写",
+        "参与算术运算",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009b1",
+        "0x4009b7",
+        "0x4009d5",
+        "0x4009d9",
+        "0x400a81"
+      ],
+      "representative_disasm": [
+        "0x4009b1: mov dword ptr [rbp - 8], edx",
+        "0x4009b7: mov eax, dword ptr [rbp - 8]",
+        "0x4009d5: mov qword ptr [rbp - 8], rax"
+      ],
+      "related_anchor_pcs": [
+        "0x4009b1",
+        "0x4009b7",
+        "0x4009d5",
+        "0x400a81",
+        "0x400ad8",
+        "0x400b7d",
+        "0x400b82"
+      ],
+      "contextual_related_pcs": [
+        "0x4009d9"
+      ],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "var:array1",
+      "object_type": "var",
+      "causal_role_class": "variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400a4b"
+      ],
+      "representative_disasm": [
+        "0x400a4b: movzx eax, byte ptr [rax]"
+      ],
+      "related_anchor_pcs": [
+        "0x400a4b"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "var:array1_sz",
+      "object_type": "var",
+      "causal_role_class": "variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related",
+        "value_defined"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4009f6",
+        "0x400a01",
+        "0x400a08",
+        "0x400a13",
+        "0x400a1a"
+      ],
+      "representative_disasm": [
+        "0x4009f6: mov rax, qword ptr [rip + 0x2026cb]",
+        "0x400a01: mov qword ptr [rip + 0x2026c0], rax",
+        "0x400a08: mov rax, qword ptr [rip + 0x2026b9]"
+      ],
+      "related_anchor_pcs": [
+        "0x4009f6",
+        "0x400a01",
+        "0x400a08",
+        "0x400a13",
+        "0x400a1a",
+        "0x400a24",
+        "0x400a30",
+        "0x400ad1"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "var:secretString",
+      "object_type": "var",
+      "causal_role_class": "variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x400c46"
+      ],
+      "representative_disasm": [
+        "0x400c46: mov rax, qword ptr [rip + 0x202533]"
+      ],
+      "related_anchor_pcs": [
+        "0x400c46"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    },
+    {
+      "object_id": "var:uops_available",
+      "object_type": "var",
+      "causal_role_class": "variable",
+      "direct_mutation_preferred": true,
+      "deletion_candidate_only": false,
+      "recommended_actions": [
+        "operand_mutation",
+        "instruction_deletion"
+      ],
+      "semantic_tags": [],
+      "direct_semantic_roles": [
+        "near_seed_path",
+        "memory_related"
+      ],
+      "contextual_semantic_roles": [
+        "backward_related",
+        "forward_related"
+      ],
+      "qualification_reasons": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "root_evidence": [
+        "backward 依赖集合成员，属于污染源上游对象",
+        "到 seed 的最短 backward 距离约为 2",
+        "参与内存操作"
+      ],
+      "rationale": [
+        "对象位于 backward 强相关集合中",
+        "backward 距离约为 2",
+        "有稳定的用户代码变异锚点",
+        "参与内存读写",
+        "在污染源附近路径上"
+      ],
+      "representative_pcs": [
+        "0x4013e4",
+        "0x401457"
+      ],
+      "representative_disasm": [
+        "0x4013e4: mov eax, dword ptr [rip + 0x210c9a]",
+        "0x401457: mov eax, dword ptr [rip + 0x210c27]"
+      ],
+      "related_anchor_pcs": [
+        "0x4013e4",
+        "0x401457"
+      ],
+      "contextual_related_pcs": [],
+      "source_refs": [],
+      "backward_distance": 2
+    }
+  ]

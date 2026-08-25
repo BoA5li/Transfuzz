@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""
+seed_pool.py
+
+种子库管理模块（优化版）。
+- 入库判定统一为 score > 库中最差
+- locked_pcs 区分同阶段/跨阶段语义
+Compatible with Python 3.6+.
+"""
+
+import random
+import os
+import shutil
+import logging
+
+logger = logging.getLogger("seed_pool")
+
+
+class Seed(object):
+    """单个种子"""
+
+    _next_id = 0
+
+    def __init__(self, asm_path, score=0.0,
+                 cross_stage_locked_pcs=None,
+                 mutation_history=None, parent_id=None):
+        """
+        参数:
+          asm_path:                 .s 汇编文件路径
+          score:                    综合评分
+          cross_stage_locked_pcs:   跨阶段锁定的 PC 集合
+                                    （前一阶段的变异点，本阶段不可触碰）
+          mutation_history:         变异历史
+          parent_id:                父种子 ID
+        """
+        self.id = Seed._next_id
+        Seed._next_id += 1
+
+        self.asm_path = asm_path
+        self.score = score
+
+        # 跨阶段锁定: 前一阶段确定的变异点，本阶段不可再变异
+        self.cross_stage_locked_pcs = set(cross_stage_locked_pcs) \
+            if cross_stage_locked_pcs else set()
+
+        # 同阶段变异历史: 仅记录，不锁定（同阶段可重复变异同一位置）
+        self.current_stage_mutated_pcs = set()
+
+        self.mutation_history = list(mutation_history) if mutation_history else []
+        self.parent_id = parent_id
+
+        self.age = 0
+        self.children_produced = 0
+        self.eval_detail = None
+
+    def record_mutation(self, anchor_pc):
+        """记录本阶段的一次变异（不锁定）"""
+        self.current_stage_mutated_pcs.add(anchor_pc)
+
+    def get_excluded_pcs(self):
+        """
+        获取本次变异应排除的 PC 集合。
+        只排除跨阶段锁定的 PC（前阶段变异点）。
+        同阶段变异过的 PC 不排除（可重复变异）。
+        """
+        return set(self.cross_stage_locked_pcs)
+
+    def create_child_for_next_stage(self):
+        """
+        为下一阶段创建子种子。
+        本阶段的所有变异点（cross_stage + current_stage）
+        都变成下一阶段的 cross_stage_locked_pcs。
+        """
+        all_locked = self.cross_stage_locked_pcs | self.current_stage_mutated_pcs
+        child = Seed(
+            asm_path=self.asm_path,
+            score=self.score,
+            cross_stage_locked_pcs=all_locked,
+            mutation_history=list(self.mutation_history),
+            parent_id=self.id,
+        )
+        child.eval_detail = self.eval_detail
+        return child
+
+    def __repr__(self):
+        return (
+            "Seed(id={}, score={:.4f}, age={}, "
+            "cross_locked={}, stage_mutated={}, children={})"
+            .format(self.id, self.score, self.age,
+                    len(self.cross_stage_locked_pcs),
+                    len(self.current_stage_mutated_pcs),
+                    self.children_produced)
+        )
+
+
+class SeedPool(object):
+    """种子库"""
+
+    def __init__(self, max_size=200, stage_name="stage1"):
+        self.seeds = []
+        self.max_size = max_size
+        self.stage_name = stage_name
+
+        self.total_added = 0
+        self.total_evicted = 0
+        self.total_rejected = 0
+
+    def should_admit(self, new_score):
+        """
+        入库条件（严格版）:
+        始终要求 score > 库中最差种子的 score。
+        库为空时，只要 score > 0 即可入库（冷启动）。
+        """
+        if not self.seeds:
+            # 库为空：冷启动，score > 0 即可
+            return new_score > 0
+
+        worst_score = min(s.score for s in self.seeds)
+        return new_score > worst_score
+
+    def add(self, seed):
+        """添加种子到库"""
+        if not self.should_admit(seed.score):
+            self.total_rejected += 1
+            return False
+
+        self.seeds.append(seed)
+        self.total_added += 1
+
+        while len(self.seeds) > self.max_size:
+            self._evict()
+
+        return True
+
+    def select(self):
+        """加权随机选择种子"""
+        if not self.seeds:
+            return None
+
+        weights = []
+        for s in self.seeds:
+            freshness = 1.0 / (1.0 + s.age * 0.15)
+            w = s.score * 0.7 + freshness * 0.3
+            weights.append(max(w, 0.01))
+
+        idx = random.choices(range(len(self.seeds)), weights=weights, k=1)[0]
+        self.seeds[idx].age += 1
+        return self.seeds[idx]
+
+    def _evict(self):
+        """淘汰最差种子"""
+        if not self.seeds:
+            return None
+
+        def evict_key(s):
+            productivity = s.children_produced / max(s.age, 1)
+            return s.score * 0.5 + productivity * 0.2 - s.age * 0.03
+
+        worst_idx = 0
+        worst_val = evict_key(self.seeds[0])
+        for i in range(1, len(self.seeds)):
+            v = evict_key(self.seeds[i])
+            if v < worst_val:
+                worst_val = v
+                worst_idx = i
+
+        evicted = self.seeds.pop(worst_idx)
+        self.total_evicted += 1
+        logger.debug("[{}] Evicted: {}".format(self.stage_name, evicted))
+        self._cleanup_seed_files(evicted)
+        return evicted
+
+    def _cleanup_seed_files(self, seed):
+        try:
+            if seed.asm_path and os.path.exists(seed.asm_path):
+                asm_dir = os.path.dirname(seed.asm_path)
+                base = os.path.basename(asm_dir)
+                if "mutant_" in base:
+                    shutil.rmtree(asm_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    def get_passed_seeds(self):
+        return [s for s in self.seeds
+                if s.eval_detail and s.eval_detail.get("passed")]
+
+    def get_best_seed(self):
+        if not self.seeds:
+            return None
+        return max(self.seeds, key=lambda s: s.score)
+
+    def get_worst_score(self):
+        if not self.seeds:
+            return 0.0
+        return min(s.score for s in self.seeds)
+
+    def stats(self):
+        if not self.seeds:
+            return {
+                "size": 0, "total_added": self.total_added,
+                "total_evicted": self.total_evicted,
+                "total_rejected": self.total_rejected,
+                "avg_score": 0, "max_score": 0, "min_score": 0,
+                "passed_count": 0, "avg_age": 0,
+            }
+
+        scores = [s.score for s in self.seeds]
+        ages = [s.age for s in self.seeds]
+
+        return {
+            "size": len(self.seeds),
+            "total_added": self.total_added,
+            "total_evicted": self.total_evicted,
+            "total_rejected": self.total_rejected,
+            "avg_score": sum(scores) / len(scores),
+            "max_score": max(scores),
+            "min_score": min(scores),
+            "passed_count": len(self.get_passed_seeds()),
+            "avg_age": sum(ages) / len(ages),
+        }

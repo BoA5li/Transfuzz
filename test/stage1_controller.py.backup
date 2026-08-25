@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""
+stage1_controller.py
+
+Stage 1 变异循环主控（优化版）。
+- period 自动检测
+- passed 种子同时加入 passed_seeds 和种子库
+- 同阶段可重复变异同一位置
+- 入库判定: score > 库中最差
+Compatible with Python 3.6+.
+"""
+
+import os
+import sys
+import json
+import subprocess
+import shutil
+import logging
+import tempfile
+
+from seed_pool import Seed, SeedPool
+from mutation_scheduler import MutationScheduler
+from stage1_evaluator import stage1_evaluate, detect_period, \
+    parse_brmisp_deltas, parse_uops_transient
+
+logger = logging.getLogger("stage1")
+
+
+class Stage1Controller(object):
+    """Stage 1 主控器"""
+
+    def __init__(self, config):
+        self.config = config
+
+        self.victim_c = config["victim_c"]
+        # period=None 表示自动检测
+        self.period = config.get("period", None)
+
+        self.budget = config.get("budget", 1000)
+        self.work_dir = config.get("work_dir", "./stage1_work")
+        self.cc = config.get("cc", "gcc")
+        self.pmu_helper_obj = config.get("pmu_helper_obj", "pmu_helper_auto.o")
+        self.pmu_uops_obj = config.get("pmu_uops_obj", "pmu_uops_rdpmc.o")
+        self.brmisp_weight = config.get("brmisp_weight", 0.5)
+        self.uops_weight = config.get("uops_weight", 0.5)
+        self.run_timeout = config.get("run_timeout", 60)
+        self.report_interval = config.get("report_interval", 50)
+
+        # 加载分析器输出
+        self.anchors = []
+        self.strong_objects = []
+        anchors_path = config.get("anchors_json")
+        if anchors_path:
+            if os.path.exists(anchors_path):
+                with open(anchors_path) as f:
+                    self.anchors = json.load(f)
+                logger.info("Loaded {} anchors from {}".format(
+                    len(self.anchors), anchors_path))
+            else:
+                logger.warning("Anchors JSON not found: {}".format(anchors_path))
+
+        strong_obj_path = config.get("strong_objects_json")
+        if strong_obj_path:
+            if os.path.exists(strong_obj_path):
+                with open(strong_obj_path) as f:
+                    self.strong_objects = json.load(f)
+                logger.info("Loaded {} strong objects from {}".format(
+                    len(self.strong_objects), strong_obj_path))
+            else:
+                logger.warning("Strong objects JSON not found: {}".format(
+                    strong_obj_path))
+
+        if not self.anchors:
+            logger.warning("No anchors loaded. Mutation loop will be ineffective.")
+
+        self.scheduler = MutationScheduler(
+            self.anchors, self.strong_objects, stage=1
+        )
+        self.seed_pool = SeedPool(
+            max_size=config.get("pool_size", 200),
+            stage_name="stage1"
+        )
+
+        os.makedirs(self.work_dir, exist_ok=True)
+        self.passed_seeds = []
+
+        # 检测到的 period（基线阶段确定后固定使用）
+        self.detected_period = self.period
+
+    def run(self):
+        """执行 Stage 1 完整流程"""
+
+        logger.info("=" * 60)
+        logger.info("Stage 1: Preprocessing")
+        logger.info("=" * 60)
+
+        seed_0 = self._preprocess()
+        if seed_0 is None:
+            logger.error("Preprocessing failed")
+            return []
+
+        logger.info("=" * 60)
+        logger.info("Stage 1: Collecting baseline")
+        logger.info("=" * 60)
+
+        baseline_eval = self._evaluate_seed(seed_0, tag="baseline")
+        if baseline_eval is None:
+            logger.error("Baseline evaluation failed")
+            return []
+
+        # 从基线评估中获取 period
+        self.detected_period = baseline_eval.get("period", self.period)
+        if self.detected_period is None:
+            self.detected_period = 6
+            logger.warning("Period detection failed, using default 6")
+
+        seed_0.score = baseline_eval["score"]
+        seed_0.eval_detail = baseline_eval
+
+        # baseline 加入种子库
+        self.seed_pool.add(seed_0)
+
+        br = baseline_eval["brmisp"]
+        uops = baseline_eval["uops"]
+        logger.info("Baseline score: {:.4f}".format(baseline_eval["score"]))
+        logger.info("  Detected period: {} (confidence: {:.3f}, method: {})".format(
+            self.detected_period,
+            baseline_eval.get("period_confidence", 0),
+            baseline_eval.get("period_detail", "unknown")))
+        logger.info("  BR_MISP: passed={}, score={:.4f}, "
+                    "baseline_mean={}, baseline_range={}, "
+                    "stability={:.3f}, elevation_rate={:.3f}, "
+                    "pattern_quality={:.3f}"
+                    .format(br["passed"], br["score"],
+                            br.get("baseline_mean"),
+                            br.get("baseline_range"),
+                            br.get("train_stability", 0),
+                            br.get("elevation_rate", 0),
+                            br.get("pattern_quality", 0)))
+        logger.info("  UOPS: passed={}, score={:.4f}, "
+                     "speculative_uops={}, stability={:.3f}, "
+                     "saturation_threshold={}"
+                     .format(uops["passed"], uops["score"],
+                             uops.get("speculative_uops", 0),
+                             uops.get("stability", 0),
+                             uops.get("saturation_threshold", 0)))
+
+        if baseline_eval["passed"]:
+            logger.info(">>> Baseline already passes Stage 1! <<<")
+            self.passed_seeds.append(seed_0)
+
+        logger.info("=" * 60)
+        logger.info("Stage 1: Mutation loop (budget={})".format(self.budget))
+        logger.info("=" * 60)
+
+        for round_idx in range(self.budget):
+            self._mutation_round(round_idx)
+
+            if (round_idx + 1) % self.report_interval == 0:
+                self._report_stats(round_idx + 1)
+
+        logger.info("=" * 60)
+        logger.info("Stage 1 complete: {} passed seeds".format(
+            len(self.passed_seeds)))
+        self._report_stats(self.budget)
+
+        if not self.passed_seeds:
+            logger.info("No passed seeds. Pipeline terminates.")
+
+        return self.passed_seeds
+
+    def _preprocess(self):
+        """预处理: C → .s"""
+        if not os.path.exists(self.victim_c):
+            logger.error("Victim C file not found: {}".format(self.victim_c))
+            return None
+
+        seed_s = os.path.join(self.work_dir, "seed_0.s")
+
+        result = subprocess.run(
+            [self.cc, "-S", "-O0", self.victim_c, "-o", seed_s],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30
+        )
+        if result.returncode != 0:
+            logger.error("Compilation failed: {}".format(
+                result.stderr.decode("utf-8", errors="ignore")))
+            return None
+
+        logger.info("Initial seed generated: {}".format(seed_s))
+        return Seed(asm_path=seed_s, score=0.0)
+
+    def _mutation_round(self, round_idx):
+        """单轮变异"""
+        seed = self.seed_pool.select()
+        if seed is None:
+            logger.warning("Round {}: empty seed pool".format(round_idx))
+            return
+
+        # 只排除跨阶段锁定的 PC，同阶段变异过的不排除
+        excluded = seed.get_excluded_pcs()
+
+        anchor = self.scheduler.select_anchor(
+            cross_stage_locked_pcs=excluded
+        )
+        if anchor is None:
+            logger.debug("Round {}: no available anchors".format(round_idx))
+            return
+
+        result = self.scheduler.apply_mutation(
+            seed.asm_path, anchor, self.work_dir
+        )
+        if result is None:
+            logger.info("Round {}: mutation apply failed".format(round_idx))
+            return
+        mutant_path, mutation_info = result
+
+        anchor_pc = mutation_info["anchor_pc"]
+        new_history = seed.mutation_history + [mutation_info]
+
+        mutant_seed = Seed(
+            asm_path=mutant_path,
+            # 跨阶段锁定继承自父种子（同阶段不额外锁定）
+            cross_stage_locked_pcs=seed.cross_stage_locked_pcs,
+            mutation_history=new_history,
+            parent_id=seed.id,
+        )
+        # 记录本阶段变异过的 PC（不锁定，仅记录）
+        mutant_seed.current_stage_mutated_pcs = \
+            set(seed.current_stage_mutated_pcs)
+        mutant_seed.record_mutation(anchor_pc)
+
+        tag = "r{}".format(round_idx)
+        eval_result = self._evaluate_seed(mutant_seed, tag=tag)
+        if eval_result is None:
+            logger.info("Round {}: evaluation failed for anchor {}".format(
+                round_idx, anchor_pc))
+            self._cleanup_mutant(mutant_path)
+            return
+
+        mutant_seed.score = eval_result["score"]
+        mutant_seed.eval_detail = eval_result
+
+        # passed 种子: 加入 passed_seeds 且 加入种子库
+        if eval_result["passed"]:
+            self.passed_seeds.append(mutant_seed)
+            logger.info(
+                "Round {}: >>> PASSED <<< score={:.4f}, anchor_pc={}"
+                .format(round_idx, eval_result["score"], anchor_pc))
+
+        # 入库判定: score > 库中最差
+        if self.seed_pool.should_admit(eval_result["score"]):
+            admitted = self.seed_pool.add(mutant_seed)
+            if admitted:
+                seed.children_produced += 1
+                logger.debug(
+                    "Round {}: admitted, score={:.4f}, pool_size={}"
+                    .format(round_idx, eval_result["score"],
+                            len(self.seed_pool.seeds)))
+        else:
+            logger.debug(
+                "Round {}: rejected, score={:.4f} <= worst={:.4f}"
+                .format(round_idx, eval_result["score"],
+                        self.seed_pool.get_worst_score()))
+            self._cleanup_mutant(mutant_path)
+
+    def _evaluate_seed(self, seed, tag="eval"):
+        """编译、运行、评估"""
+        try:
+            processed_path = self._process_asm(seed.asm_path, tag)
+            if processed_path is None:
+                logger.info("[{}] process_asm returned None".format(tag))
+                return None
+
+            exe_path = self._compile(processed_path, tag)
+            if exe_path is None:
+                logger.info("[{}] compile returned None".format(tag))
+                return None
+
+            log_lines = self._run_executable(exe_path, tag)
+            if log_lines is None:
+                logger.info("[{}] run returned None".format(tag))
+                return None
+
+            return stage1_evaluate(
+                log_lines,
+                period=self.detected_period,
+                brmisp_weight=self.brmisp_weight,
+                uops_weight=self.uops_weight,
+            )
+
+        except subprocess.TimeoutExpired:
+            logger.info("[{}] Timeout".format(tag))
+            return None
+        except Exception as e:
+            logger.info("[{}] Evaluation error: {}".format(tag, e))
+            return None
+
+    def _process_asm(self, asm_path, tag):
+        """对 .s 做插桩"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        from run_stage_pipeline_stage1_2_3 import process_asm
+
+        try:
+            with open(asm_path, "r") as f:
+                lines = f.readlines()
+        except Exception as e:
+            logger.debug("[{}] Cannot read asm: {}".format(tag, e))
+            return None
+
+        processed_lines = process_asm(lines)
+
+        base_dir = os.path.dirname(asm_path)
+        base_name = os.path.basename(asm_path).replace(".s", "")
+        processed_path = os.path.join(
+            base_dir, "{}_{}_processed.s".format(base_name, tag))
+
+        try:
+            with open(processed_path, "w") as f:
+                f.writelines(processed_lines)
+        except Exception as e:
+            logger.debug("[{}] Cannot write processed asm: {}".format(tag, e))
+            return None
+
+        return processed_path
+
+    def _compile(self, processed_asm_path, tag):
+        """编译 .s → 可执行文件"""
+        obj_path = processed_asm_path.replace(".s", ".o")
+        exe_path = processed_asm_path.replace(".s", "")
+
+        r1 = subprocess.run(
+            [self.cc, "-c", processed_asm_path, "-o", obj_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30
+        )
+        if r1.returncode != 0:
+            logger.debug("[{}] Assembly failed: {}".format(
+                tag, r1.stderr.decode("utf-8", errors="ignore")[:200]))
+            return None
+
+        link_cmd = [self.cc, obj_path, self.pmu_helper_obj]
+        if os.path.exists(self.pmu_uops_obj):
+            link_cmd.append(self.pmu_uops_obj)
+        link_cmd += ["-o", exe_path]
+
+        r2 = subprocess.run(
+            link_cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30
+        )
+        if r2.returncode != 0:
+            logger.debug("[{}] Link failed: {}".format(
+                tag, r2.stderr.decode("utf-8", errors="ignore")[:200]))
+            return None
+
+        return exe_path
+
+    def _run_executable(self, exe_path, tag):
+        """运行可执行文件"""
+        try:
+            result = subprocess.run(
+                [exe_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=self.run_timeout
+            )
+            if result.returncode != 0:
+                logger.debug("[{}] Execution failed: rc={}".format(
+                    tag, result.returncode))
+                return None
+
+            output = result.stdout.decode("utf-8", errors="ignore")
+            lines = output.splitlines()
+            if not lines:
+                logger.debug("[{}] Empty output".format(tag))
+                return None
+
+            return lines
+
+        except subprocess.TimeoutExpired:
+            logger.debug("[{}] Execution timeout ({}s)".format(
+                tag, self.run_timeout))
+            return None
+        except Exception as e:
+            logger.debug("[{}] Execution error: {}".format(tag, e))
+            return None
+
+    def _cleanup_mutant(self, mutant_path):
+        try:
+            mutant_dir = os.path.dirname(mutant_path)
+            if "mutant_" in os.path.basename(mutant_dir):
+                shutil.rmtree(mutant_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    def _report_stats(self, round_num):
+        stats = self.seed_pool.stats()
+        logger.info(
+            "Round {}/{}: pool_size={}, passed={}, "
+            "added={}, evicted={}, rejected={}, "
+            "avg_score={:.4f}, max_score={:.4f}, min_score={:.4f}, "
+            "avg_age={:.1f}"
+            .format(round_num, self.budget,
+                    stats["size"], stats["passed_count"],
+                    stats["total_added"], stats["total_evicted"],
+                    stats["total_rejected"],
+                    stats["avg_score"], stats["max_score"],
+                    stats["min_score"], stats["avg_age"]))
+
+        best = self.seed_pool.get_best_seed()
+        if best and best.eval_detail:
+            br = best.eval_detail.get("brmisp", {})
+            uops = best.eval_detail.get("uops", {})
+            logger.info(
+                "  Best: id={}, score={:.4f}, "
+                "br_elev={:.3f}, spec_uops={}"
+                .format(best.id, best.score,
+                        br.get("elevation_rate", 0),
+                        uops.get("speculative_uops", 0)))

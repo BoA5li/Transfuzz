@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""
+stage3_controller.py - 配置变异版（完整修正）
+
+修正内容：
+1. 集成配置变异逻辑
+2. 添加 _select_safe_anchor() - 保护性锚点选择
+3. 添加 _is_flush_reload_critical() - flush-reload 核心区域判定
+4. 修正 _mutation_round() - 支持配置变异和保护性汇编变异
+"""
+
+import os
+import sys
+import re
+import json
+import subprocess
+import shutil
+import logging
+import random
+
+from seed_pool import Seed, SeedPool
+from mutation_scheduler import MutationScheduler
+from stage3_evaluator import stage3_evaluate
+from stage3_config import (
+    mutate_stage3_config, 
+    save_stage3_config, 
+    load_stage3_config,
+    get_stage3_defaults,
+    generate_stage3_env,
+    print_stage3_config
+)
+
+logger = logging.getLogger("stage3")
+
+
+class Stage3Controller(object):
+    """Stage 3 主控器（配置变异版）"""
+
+    def __init__(self, config):
+        self.config = config
+
+        def _abs(p):
+            if p and not os.path.isabs(p):
+                return os.path.abspath(p)
+            return p
+
+        # 复用 auto_stage1_2_3_driver.c
+        self.driver_c = _abs(config.get(
+            "driver_c", "auto_stage1_2_3_driver.c"))
+        self.stage3_driver_c = _abs(config.get(
+            "stage3_driver_c", "stage3_driver_safe.c"))
+
+        self.budget = config.get("budget", 1000)
+        self.work_dir = _abs(config.get("work_dir", "./stage3_work"))
+        self.cc = config.get("cc", "gcc")
+        self.pmu_helper_obj = _abs(config.get(
+            "pmu_helper_obj", "pmu_helper_auto.o"))
+        self.pmu_uops_obj = _abs(config.get(
+            "pmu_uops_obj", "pmu_uops_rdpmc.o"))
+        self.run_timeout = config.get("run_timeout", 180)
+        self.report_interval = config.get("report_interval", 50)
+        self.dump_times = config.get("dump_times", 1)
+
+        self.expected_secret = config.get("expected_secret", ord('Y'))
+        logger.info(f"Expected secret: {chr(self.expected_secret)} (0x{self.expected_secret:02x})")
+
+        # ============================================================
+        # 新增：Stage 3 配置变异开关
+        # ============================================================
+        self.enable_config_mutation = config.get("enable_config_mutation", False)
+        self.config_mutation_probability = config.get("config_mutation_probability", 0.3)
+        self.enable_asm_mutation = config.get("enable_asm_mutation", True)
+        self.asm_mutation_probability = config.get("asm_mutation_probability", 0.7)
+        
+        # 加载初始配置
+        stage3_config_path = config.get("stage3_config_path", 
+                                        os.path.join(self.work_dir, "stage3_config.json"))
+        if os.path.exists(stage3_config_path):
+            self.current_stage3_config = load_stage3_config(stage3_config_path)
+            logger.info(f"Loaded Stage 3 config from {stage3_config_path}")
+        else:
+            self.current_stage3_config = get_stage3_defaults()
+            save_stage3_config(self.current_stage3_config, stage3_config_path)
+            logger.info(f"Created default Stage 3 config at {stage3_config_path}")
+        
+        self.stage3_config_path = stage3_config_path
+        
+        if config.get("verbose", False):
+            print_stage3_config(self.current_stage3_config)
+
+        # 预编译 stage3_driver_safe.o
+        self.stage3_obj = os.path.join(
+            self.work_dir, "stage3_driver_safe.o")
+
+        # anchors
+        self.anchors = []
+        self.strong_objects = []
+        anchors_path = _abs(config.get("anchors_json"))
+        if anchors_path and os.path.exists(anchors_path):
+            with open(anchors_path) as f:
+                self.anchors = json.load(f)
+            logger.info("Loaded {} anchors".format(len(self.anchors)))
+
+        strong_obj_path = _abs(config.get("strong_objects_json"))
+        if strong_obj_path and os.path.exists(strong_obj_path):
+            with open(strong_obj_path) as f:
+                self.strong_objects = json.load(f)
+            logger.info("Loaded {} strong objects".format(
+                len(self.strong_objects)))
+
+        self.scheduler = MutationScheduler(
+            self.anchors, self.strong_objects, stage=3
+        )
+        self.seed_pool = SeedPool(
+            max_size=config.get("pool_size", 200),
+            stage_name="stage3"
+        )
+
+        os.makedirs(self.work_dir, exist_ok=True)
+        self.success_seed = None
+
+    # =========================================================
+    # 主流程
+    # =========================================================
+
+    def run(self, stage2_passed_seeds):
+        """
+        执行 Stage 3 完整流程。
+
+        终止条件:
+          1. 任一种子 match=1 → 立即返回成功种子
+          2. 迭代次数用完 → 返回 None（失败）
+
+        返回: (success_seed_or_None, all_evaluated_seeds)
+        """
+        logger.info("=" * 60)
+        logger.info("Stage 3: Initialization")
+        logger.info("=" * 60)
+        logger.info(f"Config mutation: {'ENABLED' if self.enable_config_mutation else 'DISABLED'}")
+        logger.info(f"ASM mutation: {'ENABLED' if self.enable_asm_mutation else 'DISABLED'}")
+
+        # 预编译
+        self._precompile_stage3_obj()
+
+        # Stage 2 passed → Stage 3 种子
+        stage3_seeds = []
+        for s2_seed in stage2_passed_seeds:
+            s3_seed = s2_seed.create_child_for_next_stage()
+            stage3_seeds.append(s3_seed)
+            locked = (s2_seed.cross_stage_locked_pcs |
+                      s2_seed.current_stage_mutated_pcs)
+            logger.info(
+                "Stage2 seed id={}, score={:.4f}, locked={} "
+                "-> Stage3 seed id={}".format(
+                    s2_seed.id, s2_seed.score, locked, s3_seed.id))
+
+        if not stage3_seeds:
+            logger.error("No Stage 2 passed seeds to process")
+            return None, []
+
+        # 基线评估
+        logger.info("=" * 60)
+        logger.info("Stage 3: Baseline evaluation for {} seeds".format(
+            len(stage3_seeds)))
+        logger.info("=" * 60)
+
+        all_evaluated = []
+
+        for seed in stage3_seeds:
+            eval_result = self._evaluate_seed(
+                seed, tag="s3_base_{}".format(seed.id))
+            if eval_result is None:
+                logger.warning(
+                    "Baseline eval failed for seed {}".format(seed.id))
+                continue
+
+            seed.score = eval_result["score"]
+            seed.eval_detail = eval_result
+            self.seed_pool.add(seed)
+            all_evaluated.append(seed)
+
+            logger.info(
+                "  Seed {}: score={:.4f}, match_rate={:.3f}, "
+                "mean_latency={:.1f}, passed={}".format(
+                    seed.id, eval_result["score"],
+                    eval_result["match_rate"],
+                    eval_result["mean_expected_latency"],
+                    eval_result["passed"]))
+
+            # Stage 3 核心: match=1 立即终止
+            if eval_result["passed"]:
+                logger.info(
+                    "  >>> SECRET RECOVERED at baseline! <<<")
+                self.success_seed = seed
+                return seed, all_evaluated
+
+        if not self.seed_pool.seeds:
+            logger.error("No seeds survived baseline evaluation")
+            return None, all_evaluated
+
+        # 变异循环
+        logger.info("=" * 60)
+        logger.info("Stage 3: Mutation loop (budget={})".format(
+            self.budget))
+        logger.info("=" * 60)
+
+        for round_idx in range(self.budget):
+            round_result = self._mutation_round(round_idx)
+
+            if round_result is not None:
+                all_evaluated.append(round_result["seed"])
+                if round_result["passed"]:
+                    logger.info(
+                        ">>> SECRET RECOVERED at round {}! "
+                        "<<<".format(round_idx))
+                    self.success_seed = round_result["seed"]
+                    return round_result["seed"], all_evaluated
+
+            if (round_idx + 1) % self.report_interval == 0:
+                self._report_stats(round_idx + 1)
+
+        # 迭代次数用完，未成功
+        logger.info("=" * 60)
+        logger.info(
+            "Stage 3 complete: secret NOT recovered "
+            "within budget ({})".format(self.budget))
+        self._report_stats(self.budget)
+
+        return None, all_evaluated
+
+    # =========================================================
+    # 变异轮（修正版）
+    # =========================================================
+
+    def _mutation_round(self, round_idx):
+        """
+        单轮变异（配置变异 + 保护性汇编变异）。
+
+        策略：
+          1. 30% 概率变异配置参数（如果启用）
+          2. 70% 概率变异汇编指令（保护性，如果启用）
+          3. 配置变异和汇编变异可以同时发生
+
+        返回: dict 包含 seed 和 passed
+        """
+        seed = self.seed_pool.select()
+        if seed is None:
+            return None
+
+        mutant_seed = None
+        mutation_info = {}
+        mutant_path = seed.asm_path  # 默认不变异汇编
+        
+        # ============================================================
+        # 第一步：配置变异（如果启用）
+        # ============================================================
+        if self.enable_config_mutation and random.random() < self.config_mutation_probability:
+            # 变异配置
+            mutated_config = mutate_stage3_config(self.current_stage3_config)
+            
+            # 保存变异后的配置
+            config_save_path = os.path.join(
+                self.work_dir, 
+                f"stage3_config_r{round_idx}.json"
+            )
+            save_stage3_config(mutated_config, config_save_path)
+            
+            # 更新当前配置
+            self.current_stage3_config = mutated_config
+            
+            mutation_info["config_mutated"] = True
+            mutation_info["config_path"] = config_save_path
+            
+            logger.debug(f"Round {round_idx}: Config mutated, saved to {config_save_path}")
+        else:
+            mutation_info["config_mutated"] = False
+        
+        # ============================================================
+        # 第二步：汇编变异（保护性，如果启用）
+        # ============================================================
+        if self.enable_asm_mutation and random.random() < self.asm_mutation_probability:
+            excluded = seed.get_excluded_pcs()
+            
+            # 选择安全锚点（排除 flush-reload 核心区域）
+            anchor = self._select_safe_anchor(excluded)
+            if anchor is None:
+                logger.debug(f"Round {round_idx}: No safe anchors available")
+                # 只有配置变异，没有汇编变异
+                if not mutation_info.get("config_mutated"):
+                    return None
+            else:
+                # 应用变异
+                result = self.scheduler.apply_mutation(
+                    seed.asm_path, anchor, self.work_dir,
+                    cross_stage_locked_pcs=excluded
+                )
+                if result is None:
+                    logger.info(f"Round {round_idx}: Mutation apply failed")
+                    if not mutation_info.get("config_mutated"):
+                        return None
+                else:
+                    mutant_path, asm_mutation_info = result
+                    mutation_info.update(asm_mutation_info)
+                    mutation_info["asm_mutated"] = True
+                    logger.debug(f"Round {round_idx}: ASM mutated, anchor={anchor.get('pc')}")
+        else:
+            mutation_info["asm_mutated"] = False
+        
+        # ============================================================
+        # 第三步：构建变异种子
+        # ============================================================
+        anchor_pc = mutation_info.get("anchor_pc", "config_only")
+        new_history = seed.mutation_history + [mutation_info]
+
+        mutant_seed = Seed(
+            asm_path=mutant_path,
+            cross_stage_locked_pcs=seed.cross_stage_locked_pcs,
+            mutation_history=new_history,
+            parent_id=seed.id,
+        )
+        mutant_seed.current_stage_mutated_pcs = set(
+            seed.current_stage_mutated_pcs)
+        if mutation_info.get("asm_mutated"):
+            mutant_seed.record_mutation(anchor_pc)
+
+        # ============================================================
+        # 第四步：评估
+        # ============================================================
+        eval_result = self._evaluate_seed(
+            mutant_seed, tag="s3_r{}".format(round_idx))
+        if eval_result is None:
+            self._cleanup_mutant(mutant_path)
+            return None
+
+        mutant_seed.score = eval_result["score"]
+        mutant_seed.eval_detail = eval_result
+
+        # match=1 → 立即返回
+        if eval_result["passed"]:
+            logger.info(
+                "Round {}: >>> MATCH <<< score={:.4f}, "
+                "match_rate={:.3f}, latency={:.1f}, "
+                "config_mutated={}, asm_mutated={}".format(
+                    round_idx, eval_result["score"],
+                    eval_result["match_rate"],
+                    eval_result["mean_expected_latency"],
+                    mutation_info.get("config_mutated", False),
+                    mutation_info.get("asm_mutated", False)))
+            return {"passed": True, "seed": mutant_seed}
+
+        # 未 match → 入库判定
+        if self.seed_pool.should_admit(eval_result["score"]):
+            admitted = self.seed_pool.add(mutant_seed)
+            if admitted:
+                seed.children_produced += 1
+                logger.debug(
+                    "Round {}: admitted, score={:.4f}, "
+                    "latency={:.1f}".format(
+                        round_idx, eval_result["score"],
+                        eval_result["mean_expected_latency"]))
+        else:
+            self.seed_pool.total_rejected += 1
+            if mutant_path != seed.asm_path:
+                self._cleanup_mutant(mutant_path)
+
+        return {"passed": False, "seed": mutant_seed}
+
+    # =========================================================
+    # 保护性锚点选择
+    # =========================================================
+
+    def _select_safe_anchor(self, excluded_pcs):
+        """
+        选择安全的锚点（排除 flush-reload 核心区域）。
+
+        排除规则：
+          1. 跨阶段锁定的 PC
+          2. flush-reload 核心函数调用
+          3. probe array 访问指令
+          4. stage3_flush_line/stage3_reload_timed 调用
+
+        返回: anchor dict 或 None
+        """
+        safe_anchors = []
+        
+        for anchor in self.anchors:
+            pc = anchor.get("pc", "")
+            
+            # 排除跨阶段锁定
+            if pc in excluded_pcs:
+                continue
+            
+            # 排除 flush-reload 核心区域
+            if self._is_flush_reload_critical(anchor):
+                continue
+            
+            safe_anchors.append(anchor)
+        
+        if not safe_anchors:
+            return None
+        
+        # 从安全锚点中随机选择
+        return random.choice(safe_anchors)
+    
+    
+    def _is_flush_reload_critical(self, anchor):
+        """
+        判断锚点是否在 flush-reload 核心区域。
+
+        核心区域包括：
+          1. vf_run_attack_once() 调用
+          2. vf_get_probe_addr_for_secret() 调用
+          3. stage3_flush_line() 调用
+          4. stage3_reload_timed() 调用
+          5. probe array 访问（通过 causal_objects 判断）
+        """
+        disasm = anchor.get("disasm", "").lower()
+        mnemonic = anchor.get("mnemonic", "").lower()
+        
+        # 检查函数调用
+        critical_functions = [
+            "vf_run_attack_once",
+            "vf_get_probe_addr_for_secret",
+            "vf_prepare_probe_region",
+            "stage3_flush_line",
+            "stage3_reload_timed",
+            "_mm_clflush",
+            "__rdtscp",
+            "_mm_mfence",
+            "_mm_lfence",
+        ]
+        
+        if mnemonic == "call":
+            for func in critical_functions:
+                if func in disasm:
+                    return True
+        
+        # 检查 probe array 访问
+        causal_objs = anchor.get("causal_objects_full_mutation", [])
+        for obj_id in causal_objs:
+            obj = self.scheduler.strong_object_by_id.get(obj_id, {})
+            obj_name = obj.get("name", "").lower()
+            if "probe" in obj_name or "array" in obj_name:
+                return True
+        
+        # 检查语义标签
+        tags = set(anchor.get("semantic_tags", []))
+        critical_tags = {
+            "flush_reload_core",
+            "cache_timing_measurement",
+            "probe_array_access",
+        }
+        if tags & critical_tags:
+            return True
+        
+        return False
+
+    # =========================================================
+    # 评估（修正版：使用当前配置）
+    # =========================================================
+
+    def _evaluate_seed(self, seed, tag="eval"):
+        """编译、运行（ENABLE_STAGE3=1 + 配置环境变量）、评估"""
+        try:
+            with open(seed.asm_path, "r") as f:
+                asm_lines = f.readlines()
+
+            # 移除 Stage 1 插桩
+            cleaned_lines = self._remove_stage1_instrumentation(
+                asm_lines)
+            # 剥离 main
+            stripped_lines = self._strip_main_function(cleaned_lines)
+
+            out_dir = os.path.join(self.work_dir, tag)
+            os.makedirs(out_dir, exist_ok=True)
+            processed_s = os.path.join(
+                out_dir, "victim_processed.s")
+            with open(processed_s, "w") as f:
+                f.writelines(stripped_lines)
+
+            exe_path = self._compile_stage3(
+                processed_s, out_dir, tag)
+            if exe_path is None:
+                return None
+
+            log_lines = self._run_executable(exe_path, tag)
+            if log_lines is None:
+                return None
+
+            return stage3_evaluate(log_lines)
+
+        except subprocess.TimeoutExpired:
+            logger.debug("[{}] Timeout".format(tag))
+            return None
+        except Exception as e:
+            logger.debug("[{}] Evaluation error: {}".format(tag, e))
+            return None
+
+    def _precompile_stage3_obj(self):
+        """预编译 stage3_driver_safe.c → .o"""
+        os.makedirs(self.work_dir, exist_ok=True)
+
+        if not os.path.exists(self.stage3_driver_c):
+            logger.warning(
+                "stage3_driver_safe.c not found: {}".format(
+                    self.stage3_driver_c))
+            self.stage3_obj = None
+            return
+
+        compile_cmd = [
+            self.cc, "-c", "-O0",
+            self.stage3_driver_c,
+            "-o", self.stage3_obj
+        ]
+
+        r = subprocess.run(
+            compile_cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30)
+
+        if r.returncode != 0:
+            logger.warning("stage3 compile failed: {}".format(
+                r.stderr.decode("utf-8", errors="ignore")[:300]))
+            self.stage3_obj = None
+        else:
+                        logger.info("Pre-compiled stage3_driver_safe.o")
+
+    def _remove_stage1_instrumentation(self, asm_lines):
+        """移除 Stage 1 PMU 插桩代码"""
+        result = []
+        stage1_calls = [
+            "pmu_stage1_before", "pmu_stage1_after",
+            "pmu_uops_snap_before", "pmu_uops_snap_after",
+            "pmu_stage1_get_count", "pmu_stage1_get_delta",
+        ]
+        stage1_markers = [
+            "STAGE1_PMU_BEGIN", "STAGE1_PMU_END",
+            "STAGE1_UOPS_BEGIN", "STAGE1_UOPS_END",
+            "# [stage1", "# --- PMU", "# --- UOPS",
+        ]
+
+        for line in asm_lines:
+            stripped = line.strip()
+            is_call = any(
+                "call" in stripped and func in stripped
+                for func in stage1_calls)
+            is_marker = any(m in stripped for m in stage1_markers)
+
+            if is_call or is_marker:
+                result.append(
+                    "# [s3-removed] {}\n".format(stripped))
+            else:
+                result.append(line)
+
+        removed = sum(
+            1 for l in result if l.startswith("# [s3-removed]"))
+        if removed > 0:
+            logger.debug(
+                "Removed {} Stage 1 instrumentation lines".format(
+                    removed))
+
+        return result
+
+    def _strip_main_function(self, asm_lines):
+        """从汇编中剥离 main 函数体"""
+        result = []
+        in_main = False
+
+        for line in asm_lines:
+            stripped = line.strip()
+
+            if re.match(r'^\s*\.glob[al]+\s+main\s*$', stripped):
+                result.append("# [s3-strip] " + line)
+                continue
+            if re.match(
+                    r'^\s*\.type\s+main\s*,\s*@function', stripped):
+                result.append("# [s3-strip] " + line)
+                continue
+            if re.match(r'^main\s*:', stripped):
+                in_main = True
+                result.append("# [s3-strip] " + line)
+                continue
+            if in_main and re.match(
+                    r'^\s*\.size\s+main\s*,', stripped):
+                result.append("# [s3-strip] " + line)
+                in_main = False
+                continue
+            if in_main:
+                if (re.match(r'^\s*\.glob[al]+\s+\w', stripped)
+                        and 'main' not in stripped):
+                    in_main = False
+                    result.append(line)
+                    continue
+                if (re.match(
+                        r'^\s*\.type\s+\w+\s*,\s*@function',
+                        stripped) and 'main' not in stripped):
+                    in_main = False
+                    result.append(line)
+                    continue
+                result.append("# [s3-strip] " + line)
+                continue
+            result.append(line)
+
+        return result
+
+    def _compile_stage3(self, victim_s, out_dir, tag):
+        """
+        Stage 3 编译链（与 Stage 2 相同，复用同一个 driver）:
+          victim_processed.s → victim.o
+          auto_stage1_2_3_driver.c → driver.o
+          + pmu_helper_auto.o + stage3_driver_safe.o → exe
+        """
+        victim_o = os.path.join(out_dir, "victim.o")
+        driver_o = os.path.join(out_dir, "driver.o")
+        exe_path = os.path.join(out_dir, "stage3_exe")
+
+        r1 = subprocess.run(
+            [self.cc, "-c", victim_s, "-o", victim_o],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30)
+        if r1.returncode != 0:
+            logger.debug("[{}] Victim asm failed: {}".format(
+                tag,
+                r1.stderr.decode("utf-8", errors="ignore")[:300]))
+            return None
+
+        r2 = subprocess.run(
+            [self.cc, "-c", "-O0", self.driver_c, "-o", driver_o],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30)
+        if r2.returncode != 0:
+            logger.debug(
+                "[{}] Driver compile failed".format(tag))
+            return None
+
+        link_cmd = [
+            self.cc, victim_o, driver_o, self.pmu_helper_obj]
+        if self.stage3_obj and os.path.exists(self.stage3_obj):
+            link_cmd.append(self.stage3_obj)
+        if (self.pmu_uops_obj and
+                os.path.exists(self.pmu_uops_obj)):
+            link_cmd.append(self.pmu_uops_obj)
+        link_cmd += ["-o", exe_path]
+
+        r3 = subprocess.run(
+            link_cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30)
+        if r3.returncode != 0:
+            logger.debug("[{}] Link failed: {}".format(
+                tag,
+                r3.stderr.decode("utf-8", errors="ignore")[:500]))
+            return None
+
+        return exe_path
+
+    def _run_executable(self, exe_path, tag):
+        """
+        运行 Stage 3 可执行文件。
+        关键: ENABLE_STAGE3=1 启用 Stage 3 flush-reload
+              + 当前配置的环境变量
+        """
+        try:
+            env = os.environ.copy()
+            env["ENABLE_STAGE3"] = "1"
+            env["STAGE3_MODE"] = "flush-reload"
+            
+            # ============================================================
+            # 关键：注入当前配置的环境变量
+            # ============================================================
+            from stage3_config import generate_stage3_env
+            config_env = generate_stage3_env(self.current_stage3_config)
+            env.update(config_env)
+            
+            logger.debug(f"[{tag}] Running with config: {self.current_stage3_config}")
+
+            result = subprocess.run(
+                [exe_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=self.run_timeout, env=env)
+
+            if result.returncode != 0:
+                logger.debug(
+                    "[{}] Execution failed: rc={}".format(
+                        tag, result.returncode))
+                return None
+
+            output = result.stdout.decode(
+                "utf-8", errors="ignore")
+            lines = output.splitlines()
+            return lines if lines else None
+
+        except subprocess.TimeoutExpired:
+            return None
+        except Exception as e:
+            logger.debug("[{}] Run error: {}".format(tag, e))
+            return None
+
+    def _cleanup_mutant(self, mutant_path):
+        try:
+            d = os.path.dirname(mutant_path)
+            if "mutant_" in os.path.basename(d):
+                shutil.rmtree(d, ignore_errors=True)
+        except Exception:
+            pass
+
+    def _report_stats(self, round_num):
+        stats = self.seed_pool.stats()
+        logger.info(
+            "Round {}/{}: pool={}, added={}, evicted={}, "
+            "rejected={}, avg={:.4f}, max={:.4f}".format(
+                round_num, self.budget,
+                stats["size"],
+                stats["total_added"], stats["total_evicted"],
+                stats["total_rejected"],
+                stats["avg_score"], stats["max_score"]))
+
+        best = self.seed_pool.get_best_seed()
+        if best and best.eval_detail:
+            ed = best.eval_detail
+            logger.info(
+                "  Best: id={}, score={:.4f}, "
+                "match_rate={:.3f}, latency={:.1f}".format(
+                    best.id, best.score,
+                    ed.get("match_rate", 0),
+                    ed.get("mean_expected_latency", 0)))

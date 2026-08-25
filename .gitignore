@@ -1,0 +1,30 @@
+*.ko
+*.mod
+*.mod.c
+*.o
+*.cmd
+Module.symvers
+modules.order
+poc_x86
+*.log
+build/
+
+
+# Build output
+build/
+cmake-build-*/
+
+# Object / library files
+*.o
+*.so
+*.a
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+
+# Temporary output
+*.log
