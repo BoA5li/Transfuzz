@@ -28,8 +28,6 @@ import sys
 import os
 import argparse
 import json
-import re
-import subprocess
 import logging
 import time
 from pathlib import Path
@@ -46,116 +44,17 @@ from stage3_controller import Stage3Controller
 logger = logging.getLogger("pipeline")
 
 
-# ================================================================
-# 预处理: C → .s → 插桩
-# ================================================================
-
-def is_lineno_comment(stripped):
-    return bool(re.match(r"^#\s+\d+", stripped))
+EXIT_FOUND = 0
+EXIT_NOT_FOUND = 1
+EXIT_FRAMEWORK_ERROR = 2
 
 
-def process_asm(lines,
-                begin_label="STAGE1_BEGIN",
-                end_label="STAGE1_END",
-                nop_region_begin="# NOP_REGION_BEGIN",
-                nop_region_end="# NOP_REGION_END"):
-    """
-    汇编预处理:
-    1) 在 STAGE1_BEGIN/END 处插入 PMU 调用
-    2) 对 NOP_REGION 区域压缩为 nop
-    3) 过滤 #APP / #NO_APP / 行号注释
-    """
-    out = []
-    in_nop_region = False
-    nop_emitted = False
+class PipelineOutcome(object):
+    """Unambiguous process outcome for callers and the CLI."""
 
-    for line in lines:
-        stripped = line.strip()
-
-        if (stripped == "#APP" or stripped == "#NO_APP"
-                or is_lineno_comment(stripped)):
-            continue
-
-        if stripped.startswith(nop_region_begin):
-            in_nop_region = True
-            nop_emitted = False
-            continue
-
-        if stripped.startswith(nop_region_end):
-            in_nop_region = False
-            nop_emitted = False
-            continue
-
-        if stripped == "{}:".format(begin_label):
-            out.append(line)
-            out.append("\tcall pmu_stage1_before\n")
-            continue
-
-        if stripped == "{}:".format(end_label):
-            out.append(line)
-            out.append("\tcall pmu_stage1_after\n")
-            continue
-
-        if in_nop_region:
-            if (stripped == "" or stripped.startswith(".")
-                    or stripped.startswith("#")
-                    or stripped.endswith(":")):
-                continue
-            if not nop_emitted:
-                out.append("\tnop\n")
-                nop_emitted = True
-            continue
-
-        out.append(line)
-
-    return out
-
-
-def preprocess_input(input_path, work_dir, gcc="gcc"):
-    """
-    将输入 .c / .s 预处理为插桩后的 .s 文件。
-
-    返回: 插桩后的 .s 文件路径
-    """
-    input_path = Path(input_path)
-    work_dir = Path(work_dir)
-    work_dir.mkdir(parents=True, exist_ok=True)
-
-    if input_path.suffix == ".c":
-        # C → .s
-        s_file = work_dir / (input_path.stem + ".s")
-        logger.info("Compiling {} -> {}".format(input_path, s_file))
-        r = subprocess.run(
-            [gcc, "-S", str(input_path), "-o", str(s_file)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if r.returncode != 0:
-            logger.error("Compilation failed: {}".format(
-                r.stderr.decode("utf-8", errors="ignore")[:500]))
-            return None
-    elif input_path.suffix == ".s":
-        # 复制 .s 到 work_dir
-        s_file = work_dir / input_path.name
-        if str(input_path.resolve()) != str(s_file.resolve()):
-            import shutil
-            shutil.copy2(str(input_path), str(s_file))
-    else:
-        logger.error(
-            "Input must be .c or .s file, got: {}".format(
-                input_path.suffix))
-        return None
-
-    # 插桩
-    with s_file.open("r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    out_lines = process_asm(lines)
-
-    instrumented_s = work_dir / (input_path.stem + "_instrumented.s")
-    with instrumented_s.open("w", encoding="utf-8") as f:
-        f.writelines(out_lines)
-
-    logger.info("Instrumented assembly: {}".format(instrumented_s))
-    return str(instrumented_s)
+    def __init__(self, exit_code, success_seed=None):
+        self.exit_code = exit_code
+        self.success_seed = success_seed
 
 
 # ================================================================
@@ -173,19 +72,6 @@ def run_pipeline(args):
     expected_secret_byte = ord(expected_secret_char)
     os.environ['VF_EXPECTED_SECRET'] = str(expected_secret_byte)
     logger.info(f"Expected secret: '{expected_secret_char}' (0x{expected_secret_byte:02x})")
-
-    # ============================================================
-    # 预处理
-    # ============================================================
-    logger.info("=" * 70)
-    logger.info("PIPELINE: Preprocessing")
-    logger.info("=" * 70)
-
-    seed_s = preprocess_input(
-        args.input, work_dir / "preprocess", gcc=args.gcc)
-    if seed_s is None:
-        logger.error("Preprocessing failed. Pipeline aborted.")
-        return None
 
     # ============================================================
     # Stage 1: 分支误预测检测
@@ -215,11 +101,12 @@ def run_pipeline(args):
     s1_locked_pcs = {}
     if s1_passed:
         for seed in s1_passed:
-            child = seed.create_child_for_next_stage()
-            locked_pcs = [pc for pc in child.cross_stage_locked_pcs if pc is not None]
+            locked_pcs = [pc for pc in seed.get_next_stage_locked_pcs()
+                          if pc is not None]
             s1_locked_pcs[seed.asm_path] = sorted(locked_pcs)
 
         locked_path = work_dir / "stage1" / "stage1_locked_pcs.json"
+        locked_path.parent.mkdir(parents=True, exist_ok=True)
         with open(str(locked_path), "w") as f:
             json.dump(s1_locked_pcs, f, indent=2)
         logger.info("Stage 1 locked PCs exported: {}".format(
@@ -232,11 +119,17 @@ def run_pipeline(args):
     logger.info("-" * 70)
 
     if not s1_passed:
+        if s1_ctrl.framework_error:
+            logger.error("PIPELINE: Framework error: {}".format(
+                s1_ctrl.framework_error))
+            _print_final_result(False, "stage1 framework error", start_time)
+            return PipelineOutcome(EXIT_FRAMEWORK_ERROR)
         logger.error(
             "PIPELINE: No seeds passed Stage 1. "
             "Pipeline TERMINATED.")
-        _print_final_result(False, "stage1", start_time)
-        return None
+        _print_final_result(False, "stage1", start_time,
+                            s1_passed_count=0)
+        return PipelineOutcome(EXIT_NOT_FOUND)
 
     # ============================================================
     # Stage 2: Cache 加载检测
@@ -267,11 +160,12 @@ def run_pipeline(args):
     s2_locked_pcs = {}
     if s2_passed:
         for seed in s2_passed:
-            child = seed.create_child_for_next_stage()
-            locked_pcs = [pc for pc in child.cross_stage_locked_pcs if pc is not None]
+            locked_pcs = [pc for pc in seed.get_next_stage_locked_pcs()
+                          if pc is not None]
             s2_locked_pcs[seed.asm_path] = sorted(locked_pcs)
 
         locked_path = work_dir / "stage2" / "stage2_locked_pcs.json"
+        locked_path.parent.mkdir(parents=True, exist_ok=True)
         with open(str(locked_path), "w") as f:
             json.dump(s2_locked_pcs, f, indent=2)
         logger.info("Stage 2 locked PCs exported: {}".format(
@@ -284,11 +178,20 @@ def run_pipeline(args):
     logger.info("-" * 70)
 
     if not s2_passed:
+        if s2_ctrl.framework_error:
+            logger.error("PIPELINE: Framework error: {}".format(
+                s2_ctrl.framework_error))
+            _print_final_result(
+                False, "stage2 framework error", start_time,
+                s1_passed_count=len(s1_passed))
+            return PipelineOutcome(EXIT_FRAMEWORK_ERROR)
         logger.error(
             "PIPELINE: No seeds passed Stage 2. "
             "Pipeline TERMINATED.")
-        _print_final_result(False, "stage2", start_time)
-        return None
+        _print_final_result(False, "stage2", start_time,
+                            s1_passed_count=len(s1_passed),
+                            s2_passed_count=0)
+        return PipelineOutcome(EXIT_NOT_FOUND)
 
     # ============================================================
     # Stage 3: Flush-Reload 数据恢复
@@ -314,7 +217,16 @@ def run_pipeline(args):
     }
 
     s3_ctrl = Stage3Controller(s3_config)
-    success_seed, all_evaluated = s3_ctrl.run(s2_passed)
+    success_seed = s3_ctrl.run(s2_passed)
+
+    if success_seed is None and s3_ctrl.framework_error:
+        logger.error("PIPELINE: Framework error: {}".format(
+            s3_ctrl.framework_error))
+        _print_final_result(
+            False, "stage3 framework error", start_time,
+            s1_passed_count=len(s1_passed),
+            s2_passed_count=len(s2_passed))
+        return PipelineOutcome(EXIT_FRAMEWORK_ERROR)
 
     # 导出结果
     if success_seed:
@@ -335,6 +247,7 @@ def run_pipeline(args):
                     "mean_expected_latency", 0)
 
         export_path = work_dir / "stage3" / "stage3_success.json"
+        export_path.parent.mkdir(parents=True, exist_ok=True)
         with open(str(export_path), "w") as f:
             json.dump(success_info, f, indent=2)
 
@@ -356,7 +269,9 @@ def run_pipeline(args):
         s2_passed_count=len(s2_passed),
         s3_ctrl=s3_ctrl)
 
-    return success_seed
+    return PipelineOutcome(
+        EXIT_FOUND if success_seed is not None else EXIT_NOT_FOUND,
+        success_seed=success_seed)
 
 
 def _print_final_result(success, stopped_at, start_time,
@@ -373,7 +288,10 @@ def _print_final_result(success, stopped_at, start_time,
     print("=" * 70)
     print("")
 
-    if success:
+    if "framework error" in stopped_at:
+        print("  Status: FRAMEWORK ERROR - Detection aborted at {}".format(
+            stopped_at))
+    elif success:
         print("  Status: VULNERABLE - Secret successfully recovered")
     else:
         print("  Status: NOT CONFIRMED - Detection stopped at {}".format(
@@ -481,10 +399,6 @@ def main():
                          "(default: 1)")
     ap.add_argument('--expected-secret', type=str, default='Y',
                     help='Expected secret value for Stage 3 verification')
-    ap.add_argument("--enable-stage3", action="store_true", default=True)
-    ap.add_argument("--stage3-mode",   default="flush-reload",
-                    choices=["flush-reload", "prime-probe", "custom"])
-
     # 工作目录和日志
     ap.add_argument("--work-dir", default="./pipeline_work",
                     help="Working directory (default: "
@@ -504,7 +418,11 @@ def main():
     if not os.path.exists(args.input):
         sys.stderr.write(
             "Input file not found: {}\n".format(args.input))
-        sys.exit(1)
+        return EXIT_FRAMEWORK_ERROR
+    if Path(args.input).suffix not in (".c", ".s"):
+        sys.stderr.write("Input must be a .c or .s file: {}\n".format(
+            args.input))
+        return EXIT_FRAMEWORK_ERROR
 
     logger.info("=" * 70)
     logger.info("THREE-STAGE TRANSIENT EXECUTION DETECTION PIPELINE")
@@ -519,9 +437,16 @@ def main():
         args.s3_budget, args.s3_pool_size))
     logger.info("")
 
-    result = run_pipeline(args)
+    try:
+        result = run_pipeline(args)
+    except KeyboardInterrupt:
+        logger.error("Pipeline interrupted by user")
+        return EXIT_FRAMEWORK_ERROR
+    except Exception:
+        logger.exception("Pipeline framework error")
+        return EXIT_FRAMEWORK_ERROR
 
-    return 0 if result is not None else 1
+    return result.exit_code
 
 
 if __name__ == "__main__":

@@ -68,13 +68,18 @@ class Seed(object):
         """
         return set(self.cross_stage_locked_pcs)
 
+    def get_next_stage_locked_pcs(self):
+        """Return next-stage locks without allocating a temporary Seed."""
+        return set(self.cross_stage_locked_pcs) | \
+            set(self.current_stage_mutated_pcs)
+
     def create_child_for_next_stage(self):
         """
         为下一阶段创建子种子。
         本阶段的所有变异点（cross_stage + current_stage）
         都变成下一阶段的 cross_stage_locked_pcs。
         """
-        all_locked = self.cross_stage_locked_pcs | self.current_stage_mutated_pcs
+        all_locked = self.get_next_stage_locked_pcs()
         child = Seed(
             asm_path=self.asm_path,
             score=self.score,

@@ -137,7 +137,7 @@ def main():
     }
 
     controller = Stage3Controller(config)
-    success_seed, all_evaluated = controller.run(stage2_passed)
+    success_seed = controller.run(stage2_passed)
 
     # 输出结果
     print("")

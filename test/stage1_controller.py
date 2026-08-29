@@ -108,6 +108,7 @@ class Stage1Controller(object):
 
         os.makedirs(self.work_dir, exist_ok=True)
         self.passed_seeds = []
+        self.framework_error = None
 
         # 检测到的 period（基线阶段确定后固定使用）
         self.detected_period = self.period
@@ -170,6 +171,7 @@ class Stage1Controller(object):
         seed_0 = self._preprocess()
         if seed_0 is None:
             logger.error("Preprocessing failed")
+            self.framework_error = "stage1 preprocessing failed"
             return []
 
         logger.info("=" * 60)
@@ -182,6 +184,7 @@ class Stage1Controller(object):
         if baseline_eval is None:
             logger.error("Baseline evaluation failed - this is a HARD ERROR")
             logger.error("Cannot proceed without a valid baseline measurement")
+            self.framework_error = "stage1 baseline evaluation failed"
             return []
 
         # 从基线评估中获取 period

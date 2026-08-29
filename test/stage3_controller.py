@@ -266,6 +266,7 @@ class Stage3Controller(object):
         self.seed_stage3_configs = {}
 
         self.success_seed = None
+        self.framework_error = None
 
         logger.info("Stage 3 Controller initialized:")
         logger.info(
@@ -461,6 +462,9 @@ class Stage3Controller(object):
         终止条件:
           1. 任一种子 (baseline 或 mutant) match=1 -> 保存成功归档, 立即返回
           2. budget 用完 -> 返回 None
+
+        返回值只包含成功种子。完整评价轨迹没有外部消费者，且种子池、
+        成功/失败归档和统计信息已经保存了运行所需证据。
         """
         logger.info("=" * 60)
         logger.info("Stage 3: Initialization")
@@ -473,7 +477,8 @@ class Stage3Controller(object):
         # Sanity check
         if not self._sanity_check():
             logger.error("Sanity check FAILED, aborting Stage 3")
-            return None, []
+            self.framework_error = "stage3 sanity check failed"
+            return None
 
         # 预编译
         self._precompile_stage3_obj()
@@ -492,7 +497,8 @@ class Stage3Controller(object):
 
         if not stage3_seeds:
             logger.error("No Stage 2 passed seeds to process")
-            return None, []
+            self.framework_error = "stage3 received no input seeds"
+            return None
 
         # ============================================================
         # Baseline 评估 (D4: 不做无效变异检测, 直接评测直接入库)
@@ -501,8 +507,6 @@ class Stage3Controller(object):
         logger.info("Stage 3: Baseline evaluation for {} seeds".format(
             len(stage3_seeds)))
         logger.info("=" * 60)
-
-        all_evaluated = []
 
         for seed in stage3_seeds:
             tag = "s3_base_{}".format(seed.id)
@@ -531,8 +535,6 @@ class Stage3Controller(object):
             seed.eval_detail = eval_result
             # D4: baseline 无条件入库
             self.seed_pool.add(seed)
-            all_evaluated.append(seed)
-
             logger.info(
                 "  Seed {}: score={:.4f}, match_rate={:.3f}, "
                 "mean_latency={:.1f}, passed={}".format(
@@ -551,12 +553,13 @@ class Stage3Controller(object):
                     eval_result=eval_result,
                     stage="baseline")
                 self._report_failure_stats()
-                return seed, all_evaluated
+                return seed
 
         if not self.seed_pool.seeds:
             logger.error("No seeds survived baseline evaluation")
+            self.framework_error = "all stage3 baseline evaluations failed"
             self._report_failure_stats()
-            return None, all_evaluated
+            return None
 
         # ============================================================
         # 变异循环
@@ -590,7 +593,6 @@ class Stage3Controller(object):
                 round_result = None
 
             if round_result is not None:
-                all_evaluated.append(round_result["seed"])
                 if round_result.get("passed"):
                     logger.info(
                         ">>> SECRET RECOVERED at round {}! <<<".format(
@@ -602,7 +604,7 @@ class Stage3Controller(object):
                         eval_result=round_result["seed"].eval_detail,
                         stage="mutation_round_{}".format(round_idx))
                     self._report_failure_stats()
-                    return round_result["seed"], all_evaluated
+                    return round_result["seed"]
 
             if (round_idx + 1) % self.report_interval == 0:
                 self._report_stats(round_idx + 1)
@@ -615,7 +617,7 @@ class Stage3Controller(object):
         self._report_stats(self.budget)
         self._report_failure_stats()
 
-        return None, all_evaluated
+        return None
 
     # =================================================================
     # 变异轮

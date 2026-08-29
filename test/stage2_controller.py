@@ -106,6 +106,7 @@ class Stage2Controller(object):
 
         os.makedirs(self.work_dir, exist_ok=True)
         self.passed_seeds = []
+        self.framework_error = None
 
         logger.info("Stage 2 Controller initialized:")
         logger.info("  budget={}, run_timeout={}s, compile_timeout={}s".format(
@@ -168,6 +169,7 @@ class Stage2Controller(object):
 
         if not stage2_seeds:
             logger.error("No Stage 1 passed seeds to process")
+            self.framework_error = "stage2 received no input seeds"
             return []
 
         # ============================================================
@@ -222,10 +224,12 @@ class Stage2Controller(object):
         if baseline_success_count == 0:
             logger.error("All baseline evaluations failed - HARD ERROR")
             logger.error("Cannot proceed without any valid baseline measurement")
+            self.framework_error = "all stage2 baseline evaluations failed"
             return []
 
         if not self.seed_pool.seeds:
             logger.error("No seeds survived baseline evaluation")
+            self.framework_error = "stage2 seed pool rejected every baseline"
             return []
 
         logger.info("Stage 2: {}/{} baselines succeeded, entering mutation loop"
