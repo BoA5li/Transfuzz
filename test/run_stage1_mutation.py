@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage1_controller import Stage1Controller
 from stage1_evaluator import DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
+from run_stage_pipeline_stage1_2_3 import (
+    STAGE1_PMU_EVENTS, normalize_stage1_pmu_event)
 
 
 def main():
@@ -47,6 +49,11 @@ def main():
                     help="Path to pmu_helper_auto.o")
     ap.add_argument("--pmu-uops-obj", default="pmu_uops_rdpmc.o",
                     help="Path to pmu_uops_rdpmc.o")
+    ap.add_argument("--stage1-pmu-event", default="conditional",
+                    type=normalize_stage1_pmu_event,
+                    choices=sorted(STAGE1_PMU_EVENTS),
+                    help="Stage 1 PMU event selected during instrumentation "
+                         "(default: conditional)")
     ap.add_argument("--brmisp-weight", type=float,
                     default=DEFAULT_BRMISP_WEIGHT,
                     help="BR_MISP score weight (default: 0.8)")
@@ -102,6 +109,7 @@ def main():
         "cc": args.gcc,
         "pmu_helper_obj": args.pmu_helper_obj,
         "pmu_uops_obj": args.pmu_uops_obj,
+        "stage1_pmu_event": args.stage1_pmu_event,
         "brmisp_weight": args.brmisp_weight,
         "uops_weight": args.uops_weight,
         "run_timeout": args.run_timeout,

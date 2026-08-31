@@ -39,6 +39,8 @@ from seed_pool import Seed
 from stage1_controller import Stage1Controller
 from stage2_controller import Stage2Controller
 from stage3_controller import Stage3Controller
+from run_stage_pipeline_stage1_2_3 import (
+    STAGE1_PMU_EVENTS, normalize_stage1_pmu_event)
 
 
 logger = logging.getLogger("pipeline")
@@ -92,6 +94,7 @@ def run_pipeline(args):
         "cc": args.gcc,
         "pmu_helper_obj": args.pmu_helper_obj,
         "pmu_uops_obj": args.pmu_uops_obj,
+        "stage1_pmu_event": args.stage1_pmu_event,
     }
 
     s1_ctrl = Stage1Controller(s1_config)
@@ -368,6 +371,11 @@ def main():
     ap.add_argument("--pmu-uops-obj",
                     default="pmu_uops_rdpmc.o",
                     help="UOPS measurement object file")
+    ap.add_argument("--stage1-pmu-event", default="conditional",
+                    type=normalize_stage1_pmu_event,
+                    choices=sorted(STAGE1_PMU_EVENTS),
+                    help="Stage 1 PMU event selected during instrumentation "
+                         "(default: conditional)")
 
     # 分析器输出
     ap.add_argument("--anchors-json",

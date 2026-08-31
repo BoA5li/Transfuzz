@@ -19,11 +19,16 @@ perf_event_open_sys(struct perf_event_attr *hw_event, pid_t pid, int cpu,
 }
 
 /* =============================================================
- * Stage 1: BR_MISP_RETIRED.CONDITIONAL 计数
+ * Stage 1: selectable branch-misprediction events
+ *
+ * The assembly rewriter chooses one event-specific before/after pair.  There
+ * is therefore no event-selection branch in the measured execution path.
  * ============================================================= */
 
 static int fd_stage1 = -1;
+static int fd_stage1_indirect = -1;
 static uint64_t stage1_before = 0;
+static uint64_t stage1_indirect_before = 0;
 
 #define MAX_STAGE1_SAMPLES  1024
 static uint64_t stage1_deltas[MAX_STAGE1_SAMPLES];
@@ -39,15 +44,20 @@ static int      stage1_count = 0;
  *     如果 0x01C5 在你的平台上不可用，可改回 0x0CC5
  */
 #define RAW_BR_MISP_COND  0x01C5
+#define RAW_BR_MISP_INDIRECT  0xE489
 
-static int setup_branch_miss_event(void)
+/* Emitted only by preprocessing configured for the indirect event. */
+extern const unsigned char pmu_stage1_event_indirect_selected
+    __attribute__((weak));
+
+static int setup_branch_miss_event(uint64_t raw_config, const char *event_name)
 {
     struct perf_event_attr pe;
     memset(&pe, 0, sizeof(struct perf_event_attr));
 
     pe.type   = PERF_TYPE_RAW;
     pe.size   = sizeof(struct perf_event_attr);
-    pe.config = RAW_BR_MISP_COND;
+    pe.config = raw_config;
 
     pe.disabled       = 0;
     pe.exclude_kernel = 1;
@@ -55,8 +65,8 @@ static int setup_branch_miss_event(void)
 
     int fd = perf_event_open_sys(&pe, 0, -1, -1, 0);
     if (fd == -1) {
-        fprintf(stderr, "Error opening br_misp_retired.conditional (0x%x): %s\n",
-                RAW_BR_MISP_COND, strerror(errno));
+        fprintf(stderr, "Error opening %s (0x%llx): %s\n",
+                event_name, (unsigned long long)raw_config, strerror(errno));
     }
     return fd;
 }
@@ -85,6 +95,28 @@ void pmu_stage1_after(void)
     uint64_t delta = val - stage1_before;
     if (stage1_count < MAX_STAGE1_SAMPLES) {
         stage1_deltas[stage1_count++] = delta;
+    }
+}
+
+/*
+ * BR_MISP_EXEC.INDIRECT
+ *   EventSel=0x89, UMask=0xE4 => config=0xE489
+ *
+ * These entry points are selected directly by the assembly rewriter.  They
+ * contain no runtime dispatch on the configured event.
+ */
+void pmu_stage1_indirect_before(void)
+{
+    (void)read(fd_stage1_indirect, &stage1_indirect_before,
+               sizeof(stage1_indirect_before));
+}
+
+void pmu_stage1_indirect_after(void)
+{
+    uint64_t val = 0;
+    read(fd_stage1_indirect, &val, sizeof(val));
+    if (stage1_count < MAX_STAGE1_SAMPLES) {
+        stage1_deltas[stage1_count++] = val - stage1_indirect_before;
     }
 }
 
@@ -141,7 +173,14 @@ uint64_t pmu_read_l1d_miss(void)
 __attribute__((constructor))
 static void pmu_init(void)
 {
-    fd_stage1   = setup_branch_miss_event();
+    /* Selection happens once before main(), outside every measured window. */
+    if (&pmu_stage1_event_indirect_selected != NULL) {
+        fd_stage1_indirect = setup_branch_miss_event(
+            RAW_BR_MISP_INDIRECT, "BR_MISP_EXEC.INDIRECT");
+    } else {
+        fd_stage1 = setup_branch_miss_event(
+            RAW_BR_MISP_COND, "BR_MISP_RETIRED.CONDITIONAL");
+    }
     fd_l1d_miss = setup_l1d_miss_event();
 }
 
@@ -149,5 +188,6 @@ __attribute__((destructor))
 static void pmu_fini(void)
 {
     if (fd_stage1   != -1) close(fd_stage1);
+    if (fd_stage1_indirect != -1) close(fd_stage1_indirect);
     if (fd_l1d_miss != -1) close(fd_l1d_miss);
 }

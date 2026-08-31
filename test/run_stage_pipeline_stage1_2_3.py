@@ -14,6 +14,27 @@ import os
 from pathlib import Path
 
 
+STAGE1_PMU_EVENTS = {
+    "conditional": ("pmu_stage1_before", "pmu_stage1_after"),
+    "indirect": ("pmu_stage1_indirect_before", "pmu_stage1_indirect_after"),
+}
+
+
+def normalize_stage1_pmu_event(event_name):
+    """Return a canonical event key, rejecting unknown configurations."""
+    normalized = str(event_name or "conditional").strip().lower()
+    aliases = {
+        "br_misp_retired.conditional": "conditional",
+        "br_misp_exec.indirect": "indirect",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in STAGE1_PMU_EVENTS:
+        raise ValueError(
+            "unsupported Stage 1 PMU event {!r}; expected one of: {}".format(
+                event_name, ", ".join(sorted(STAGE1_PMU_EVENTS))))
+    return normalized
+
+
 def is_lineno_comment(stripped):
     """判断是否是 gcc 生成的行号注释"""
     return bool(re.match(r"^#\s+\d+", stripped))
@@ -23,14 +44,27 @@ def process_asm(lines,
                 begin_label="STAGE1_BEGIN",
                 end_label="STAGE1_END",
                 nop_region_begin="# NOP_REGION_BEGIN",
-                nop_region_end="# NOP_REGION_END"):
+                nop_region_end="# NOP_REGION_END",
+                stage1_pmu_event="conditional"):
     """
     第一轮用的汇编处理：
     1) 在 begin_label/end_label 处插入 PMU 调用
     2) 对 NOP_REGION 区域压缩为 nop
     3) 去掉 #APP / #NO_APP / 行号注释
     """
+    event_key = normalize_stage1_pmu_event(stage1_pmu_event)
+    before_symbol, after_symbol = STAGE1_PMU_EVENTS[event_key]
     out = []
+    if event_key == "indirect":
+        # Link-time marker: the helper constructor opens only the selected raw
+        # event.  This is emitted during preprocessing, not tested in-window.
+        out.extend([
+            "\t.pushsection .rodata\n",
+            "\t.globl pmu_stage1_event_indirect_selected\n",
+            "pmu_stage1_event_indirect_selected:\n",
+            "\t.byte 1\n",
+            "\t.popsection\n",
+        ])
     in_nop_region = False
     nop_emitted = False
 
@@ -55,12 +89,12 @@ def process_asm(lines,
         # STAGE1_BEGIN/END 插桩
         if stripped == "{0}:".format(begin_label):
             out.append(line)
-            out.append("\tcall pmu_stage1_before\n")
+            out.append("\tcall {}\n".format(before_symbol))
             continue
 
         if stripped == "{0}:".format(end_label):
             out.append(line)
-            out.append("\tcall pmu_stage1_after\n")
+            out.append("\tcall {}\n".format(after_symbol))
             continue
 
         # NOP 区域内部压缩
@@ -193,7 +227,8 @@ def build_and_run_from_s(s_file, pmu_helper_obj, pmu_uops_obj,
 
 
 def pipeline_two_rounds_from_c(c_file, pmu_helper_obj, pmu_uops_obj,
-                               post_script, period, gcc="gcc"):
+                               post_script, period, gcc="gcc",
+                               stage1_pmu_event="conditional"):
     """从 .c 起跑两轮实验。"""
     c_file = Path(c_file)
     pmu_helper_obj = Path(pmu_helper_obj)
@@ -208,7 +243,7 @@ def pipeline_two_rounds_from_c(c_file, pmu_helper_obj, pmu_uops_obj,
 
     with s_file.open("r", encoding="utf-8") as f:
         lines = f.readlines()
-    out_lines = process_asm(lines)
+    out_lines = process_asm(lines, stage1_pmu_event=stage1_pmu_event)
     with s_file.open("w", encoding="utf-8") as f:
         f.writelines(out_lines)
     print("[INFO] Instrumented assembly written back to {}".format(s_file))
@@ -230,7 +265,7 @@ def pipeline_two_rounds_from_c(c_file, pmu_helper_obj, pmu_uops_obj,
     return s_file
 
 
-def process_asm_only(asm_file):
+def process_asm_only(asm_file, stage1_pmu_event="conditional"):
     """仅对 .s 做插桩处理"""
     asm_file = Path(asm_file)
     if not asm_file.exists():
@@ -238,7 +273,7 @@ def process_asm_only(asm_file):
         sys.exit(1)
     with asm_file.open("r", encoding="utf-8") as f:
         lines = f.readlines()
-    out_lines = process_asm(lines)
+    out_lines = process_asm(lines, stage1_pmu_event=stage1_pmu_event)
     with asm_file.open("w", encoding="utf-8") as f:
         f.writelines(out_lines)
     print("[INFO] Instrumented assembly written back to {}".format(asm_file))
@@ -358,6 +393,11 @@ def main():
                     help="Path to pmu_helper object file (default: pmu_helper_auto.o)")
     ap.add_argument("--pmu-uops-obj", default="pmu_uops_rdpmc.o",
                     help="Path to pmu_uops_rdpmc object file (default: pmu_uops_rdpmc.o)")
+    ap.add_argument("--stage1-pmu-event", default="conditional",
+                    type=normalize_stage1_pmu_event,
+                    choices=sorted(STAGE1_PMU_EVENTS),
+                    help="Stage 1 branch event selected during instrumentation "
+                         "(default: conditional)")
     ap.add_argument("--post-script", default="post_test_stage_auto.py",
                     help="Post-process script (default: post_test_stage_auto.py)")
     ap.add_argument("-p", "--period", type=int, default=10,
@@ -385,6 +425,7 @@ def main():
             post_script=args.post_script,
             period=args.period,
             gcc=args.gcc,
+            stage1_pmu_event=args.stage1_pmu_event,
         )
         if args.enable_stage2 or args.enable_stage3:
             pipeline_stage2_from_c(
@@ -400,7 +441,7 @@ def main():
                 stage3_mode=args.stage3_mode,
             )
     elif inp.suffix == ".s":
-        process_asm_only(inp)
+        process_asm_only(inp, stage1_pmu_event=args.stage1_pmu_event)
     else:
         sys.stderr.write("Input must be a .c or .s file\n")
         sys.exit(1)

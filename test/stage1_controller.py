@@ -46,6 +46,7 @@ class Stage1Controller(object):
         self.cc = config.get("cc", "gcc")
         self.pmu_helper_obj = config.get("pmu_helper_obj", "pmu_helper_auto.o")
         self.pmu_uops_obj = config.get("pmu_uops_obj", "pmu_uops_rdpmc.o")
+        self.stage1_pmu_event = config.get("stage1_pmu_event", "conditional")
         self.brmisp_weight = config.get(
             "brmisp_weight", DEFAULT_BRMISP_WEIGHT)
         self.uops_weight = config.get("uops_weight", DEFAULT_UOPS_WEIGHT)
@@ -711,7 +712,13 @@ class Stage1Controller(object):
             logger.debug("[{}] Cannot read asm: {}".format(tag, e))
             return None
 
-        processed_lines = process_asm(lines)
+        try:
+            processed_lines = process_asm(
+                lines, stage1_pmu_event=self.stage1_pmu_event)
+        except ValueError as exc:
+            self.framework_error = str(exc)
+            logger.error("[{}] {}".format(tag, exc))
+            return None
 
         base_dir = os.path.dirname(asm_path)
         base_name = os.path.basename(asm_path).replace(".s", "")

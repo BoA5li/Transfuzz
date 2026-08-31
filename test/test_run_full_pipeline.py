@@ -23,6 +23,7 @@ def _args(work_dir):
         s2_pool_size=2, s3_budget=0, s3_pool_size=2,
         anchors_json=None, strong_objects_json=None, gcc="gcc",
         pmu_helper_obj="pmu.o", pmu_uops_obj="uops.o",
+        stage1_pmu_event="indirect",
         driver_c="driver.c", stage3_driver_c="stage3.c", dump_times=1)
 
 
