@@ -27,8 +27,10 @@ perf_event_open_sys(struct perf_event_attr *hw_event, pid_t pid, int cpu,
 
 static int fd_stage1 = -1;
 static int fd_stage1_indirect = -1;
+static int fd_stage1_disambiguation = -1;
 static uint64_t stage1_before = 0;
 static uint64_t stage1_indirect_before = 0;
+static uint64_t stage1_disambiguation_before = 0;
 
 #define MAX_STAGE1_SAMPLES  1024
 static uint64_t stage1_deltas[MAX_STAGE1_SAMPLES];
@@ -45,12 +47,15 @@ static int      stage1_count = 0;
  */
 #define RAW_BR_MISP_COND  0x01C5
 #define RAW_BR_MISP_INDIRECT  0xE489
+#define RAW_MACHINE_CLEARS_DISAMBIGUATION  0x08C3
 
 /* Emitted only by preprocessing configured for the indirect event. */
 extern const unsigned char pmu_stage1_event_indirect_selected
     __attribute__((weak));
+extern const unsigned char pmu_stage1_event_disambiguation_selected
+    __attribute__((weak));
 
-static int setup_branch_miss_event(uint64_t raw_config, const char *event_name)
+static int setup_stage1_event(uint64_t raw_config, const char *event_name)
 {
     struct perf_event_attr pe;
     memset(&pe, 0, sizeof(struct perf_event_attr));
@@ -120,6 +125,28 @@ void pmu_stage1_indirect_after(void)
     }
 }
 
+/*
+ * MACHINE_CLEARS.DISAMBIGUATION
+ *   EventSel=0xC3, UMask=0x08 => config=0x08C3
+ *
+ * Used to count machine clears caused by memory-disambiguation failures.
+ * Selection remains outside the measured execution path.
+ */
+void pmu_stage1_disambiguation_before(void)
+{
+    (void)read(fd_stage1_disambiguation, &stage1_disambiguation_before,
+               sizeof(stage1_disambiguation_before));
+}
+
+void pmu_stage1_disambiguation_after(void)
+{
+    uint64_t val = 0;
+    read(fd_stage1_disambiguation, &val, sizeof(val));
+    if (stage1_count < MAX_STAGE1_SAMPLES) {
+        stage1_deltas[stage1_count++] = val - stage1_disambiguation_before;
+    }
+}
+
 /* =============================================================
  * Stage 2: L1D miss 计数（cache probe 用）
  * ============================================================= */
@@ -174,11 +201,15 @@ __attribute__((constructor))
 static void pmu_init(void)
 {
     /* Selection happens once before main(), outside every measured window. */
-    if (&pmu_stage1_event_indirect_selected != NULL) {
-        fd_stage1_indirect = setup_branch_miss_event(
+    if (&pmu_stage1_event_disambiguation_selected != NULL) {
+        fd_stage1_disambiguation = setup_stage1_event(
+            RAW_MACHINE_CLEARS_DISAMBIGUATION,
+            "MACHINE_CLEARS.DISAMBIGUATION");
+    } else if (&pmu_stage1_event_indirect_selected != NULL) {
+        fd_stage1_indirect = setup_stage1_event(
             RAW_BR_MISP_INDIRECT, "BR_MISP_EXEC.INDIRECT");
     } else {
-        fd_stage1 = setup_branch_miss_event(
+        fd_stage1 = setup_stage1_event(
             RAW_BR_MISP_COND, "BR_MISP_RETIRED.CONDITIONAL");
     }
     fd_l1d_miss = setup_l1d_miss_event();
@@ -189,5 +220,6 @@ static void pmu_fini(void)
 {
     if (fd_stage1   != -1) close(fd_stage1);
     if (fd_stage1_indirect != -1) close(fd_stage1_indirect);
+    if (fd_stage1_disambiguation != -1) close(fd_stage1_disambiguation);
     if (fd_l1d_miss != -1) close(fd_l1d_miss);
 }

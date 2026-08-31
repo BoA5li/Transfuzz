@@ -32,6 +32,19 @@ class Stage1PmuEventSelectionTests(unittest.TestCase):
             SOURCE, stage1_pmu_event="BR_MISP_EXEC.INDIRECT"))
         self.assertIn("call pmu_stage1_indirect_before", output)
 
+    def test_disambiguation_uses_direct_event_specific_calls(self):
+        output = "".join(process_asm(
+            SOURCE, stage1_pmu_event="disambiguation"))
+        self.assertIn("call pmu_stage1_disambiguation_before", output)
+        self.assertIn("call pmu_stage1_disambiguation_after", output)
+        self.assertIn("pmu_stage1_event_disambiguation_selected:", output)
+        self.assertNotIn("call pmu_stage1_before", output)
+
+    def test_machine_clears_full_event_name_is_accepted(self):
+        output = "".join(process_asm(
+            SOURCE, stage1_pmu_event="MACHINE_CLEARS.DISAMBIGUATION"))
+        self.assertIn("call pmu_stage1_disambiguation_before", output)
+
     def test_unknown_event_fails_closed(self):
         with self.assertRaises(ValueError):
             process_asm(SOURCE, stage1_pmu_event="unknown-event")

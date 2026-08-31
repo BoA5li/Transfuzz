@@ -17,6 +17,14 @@ from pathlib import Path
 STAGE1_PMU_EVENTS = {
     "conditional": ("pmu_stage1_before", "pmu_stage1_after"),
     "indirect": ("pmu_stage1_indirect_before", "pmu_stage1_indirect_after"),
+    "disambiguation": (
+        "pmu_stage1_disambiguation_before",
+        "pmu_stage1_disambiguation_after"),
+}
+
+STAGE1_PMU_EVENT_MARKERS = {
+    "indirect": "pmu_stage1_event_indirect_selected",
+    "disambiguation": "pmu_stage1_event_disambiguation_selected",
 }
 
 
@@ -26,6 +34,7 @@ def normalize_stage1_pmu_event(event_name):
     aliases = {
         "br_misp_retired.conditional": "conditional",
         "br_misp_exec.indirect": "indirect",
+        "machine_clears.disambiguation": "disambiguation",
     }
     normalized = aliases.get(normalized, normalized)
     if normalized not in STAGE1_PMU_EVENTS:
@@ -55,13 +64,14 @@ def process_asm(lines,
     event_key = normalize_stage1_pmu_event(stage1_pmu_event)
     before_symbol, after_symbol = STAGE1_PMU_EVENTS[event_key]
     out = []
-    if event_key == "indirect":
+    event_marker = STAGE1_PMU_EVENT_MARKERS.get(event_key)
+    if event_marker:
         # Link-time marker: the helper constructor opens only the selected raw
         # event.  This is emitted during preprocessing, not tested in-window.
         out.extend([
             "\t.pushsection .rodata\n",
-            "\t.globl pmu_stage1_event_indirect_selected\n",
-            "pmu_stage1_event_indirect_selected:\n",
+            "\t.globl {}\n".format(event_marker),
+            "{}:\n".format(event_marker),
             "\t.byte 1\n",
             "\t.popsection\n",
         ])
