@@ -621,7 +621,7 @@ class Stage1Controller(object):
                 try:
                     mutant_dir = os.path.dirname(processed_path)
                     if "mutant_" in mutant_dir:
-                        fail_root = os.path.join(self.work_dir, "stage1", "_failures")
+                        fail_root = self._failure_root()
                         os.makedirs(fail_root, exist_ok=True)
                         dst = os.path.join(fail_root, os.path.basename(mutant_dir))
                         if not os.path.exists(dst):
@@ -800,9 +800,13 @@ class Stage1Controller(object):
 
         return exe_path
     
+    def _failure_root(self):
+        """Return the canonical failure directory for this Stage 1 work dir."""
+        return os.path.join(self.work_dir, "_failures")
+
     def _save_failure_artifact(self, src_path, tag, fail_type, err_msg):
         """保留失败现场用于事后分析"""
-        fail_dir = os.path.join(self.work_dir, "stage1", "_failures", fail_type)
+        fail_dir = os.path.join(self._failure_root(), fail_type)
         os.makedirs(fail_dir, exist_ok=True)
         
         # 复制源文件
