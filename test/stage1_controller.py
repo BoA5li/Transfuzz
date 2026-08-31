@@ -836,10 +836,6 @@ class Stage1Controller(object):
         start_time = time.time()
         
         try:
-            env = os.environ.copy()
-            env.pop("ENABLE_STAGE3", None)
-            env.pop("STAGE3_MODE", None)
-            #env["VF_EXPECTED_SECRET"] = str(self.expected_secret)
             # 启动进程
             proc = subprocess.Popen(
                 [exe_path],
