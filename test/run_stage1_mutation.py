@@ -16,6 +16,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage1_controller import Stage1Controller
+from stage1_evaluator import DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
 
 
 def main():
@@ -46,10 +47,12 @@ def main():
                     help="Path to pmu_helper_auto.o")
     ap.add_argument("--pmu-uops-obj", default="pmu_uops_rdpmc.o",
                     help="Path to pmu_uops_rdpmc.o")
-    ap.add_argument("--brmisp-weight", type=float, default=0.5,
-                    help="BR_MISP score weight (default: 0.5)")
-    ap.add_argument("--uops-weight", type=float, default=0.5,
-                    help="UOPS score weight (default: 0.5)")
+    ap.add_argument("--brmisp-weight", type=float,
+                    default=DEFAULT_BRMISP_WEIGHT,
+                    help="BR_MISP score weight (default: 0.8)")
+    ap.add_argument("--uops-weight", type=float,
+                    default=DEFAULT_UOPS_WEIGHT,
+                    help="UOPS score weight (default: 0.2)")
     ap.add_argument("--run-timeout", type=int, default=60,
                     help="Execution timeout seconds (default: 60)")
     ap.add_argument("--early-stop", type=int, default=10,

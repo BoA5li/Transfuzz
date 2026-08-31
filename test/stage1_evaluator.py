@@ -592,7 +592,13 @@ def uops_transient_score(transients, period):
 # 综合评分
 # ============================================================
 
-def stage1_evaluate(log_lines, period=None, brmisp_weight=0.5, uops_weight=0.5):
+DEFAULT_BRMISP_WEIGHT = 0.8
+DEFAULT_UOPS_WEIGHT = 0.2
+
+
+def stage1_evaluate(log_lines, period=None,
+                    brmisp_weight=DEFAULT_BRMISP_WEIGHT,
+                    uops_weight=DEFAULT_UOPS_WEIGHT):
     """
     Stage 1 综合评分。
 
@@ -631,27 +637,28 @@ def stage1_evaluate(log_lines, period=None, brmisp_weight=0.5, uops_weight=0.5):
                 period_confidence = 0.1
                 period_detail = "fallback_default"
 
+    if brmisp_weight < 0 or uops_weight < 0:
+        raise ValueError("Stage 1 score weights must be non-negative")
+    total_w = brmisp_weight + uops_weight
+    if total_w <= 0:
+        raise ValueError("At least one Stage 1 score weight must be positive")
+
     # 评分
     br_eval = brmisp_pattern_score(brmisp_deltas, detected_period)
     uops_eval = uops_transient_score(uops_transients, detected_period)
 
-    # 综合
-    if br_eval["detail"] != "ok" and uops_eval["detail"] != "ok":
-        combined_score = 0.0
-    elif br_eval["detail"] != "ok":
-        combined_score = uops_eval["score"] * 0.5
-    elif uops_eval["detail"] != "ok":
-        combined_score = br_eval["score"] * 0.5
-    else:
-        total_w = brmisp_weight + uops_weight
-        combined_score = (br_eval["score"] * brmisp_weight +
-                          uops_eval["score"] * uops_weight) / total_w
+    # 无效指标不贡献分数，但仍保留其权重，避免缺失指标导致剩余指标
+    # 被重新归一化并获得不合理的满权重。
+    brmisp_score = br_eval["score"] if br_eval["detail"] == "ok" else 0.0
+    uops_score = uops_eval["score"] if uops_eval["detail"] == "ok" else 0.0
+    combined_score = (brmisp_score * brmisp_weight +
+                      uops_score * uops_weight) / total_w
 
     if period_confidence < 0.5:
         combined_score *= (0.5 + period_confidence)
 
     combined_passed = (
-        (br_eval["detail"] == "ok" and br_eval["passed"]) or
+        (br_eval["detail"] == "ok" and br_eval["passed"]) and
         (uops_eval["detail"] == "ok" and uops_eval["passed"])
     )
 
@@ -663,4 +670,8 @@ def stage1_evaluate(log_lines, period=None, brmisp_weight=0.5, uops_weight=0.5):
         "period_detail": period_detail,
         "brmisp": br_eval,
         "uops": uops_eval,
+        "score_weights": {
+            "brmisp": brmisp_weight / total_w,
+            "uops": uops_weight / total_w,
+        },
     }

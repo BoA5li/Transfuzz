@@ -24,7 +24,8 @@ import time
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
 from stage1_evaluator import stage1_evaluate, detect_period, \
-    parse_brmisp_deltas, parse_uops_transient
+    parse_brmisp_deltas, parse_uops_transient, \
+    DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
 
 logger = logging.getLogger("stage1")
 
@@ -44,8 +45,9 @@ class Stage1Controller(object):
         self.cc = config.get("cc", "gcc")
         self.pmu_helper_obj = config.get("pmu_helper_obj", "pmu_helper_auto.o")
         self.pmu_uops_obj = config.get("pmu_uops_obj", "pmu_uops_rdpmc.o")
-        self.brmisp_weight = config.get("brmisp_weight", 0.5)
-        self.uops_weight = config.get("uops_weight", 0.5)
+        self.brmisp_weight = config.get(
+            "brmisp_weight", DEFAULT_BRMISP_WEIGHT)
+        self.uops_weight = config.get("uops_weight", DEFAULT_UOPS_WEIGHT)
 
         # ============================================================
         # ✅ 新增：超时配置
@@ -116,6 +118,10 @@ class Stage1Controller(object):
         logger.info("Stage 1 Controller initialized:")
         logger.info("  budget={}, run_timeout={}s, compile_timeout={}s".format(
             self.budget, self.run_timeout, self.compile_timeout))
+        logger.info(
+            "  pass_gate=BR_MISP_AND_UOPS, score_weights="
+            "BR_MISP:{:.3f}/UOPS:{:.3f}".format(
+                self.brmisp_weight, self.uops_weight))
         
         #注册退出清理钩子
         import atexit
