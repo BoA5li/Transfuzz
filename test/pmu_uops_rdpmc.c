@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <cpuid.h>
 
 /* ---- perf_event_open 封装 ---- */
 
@@ -62,6 +63,48 @@ static uint32_t retired_delta_arr[MAX_UOPS_SAMPLES];
 static int      uops_cnt = 0;
 
 static int uops_available = 0;
+static int uops_status_code = 0;
+static int uops_runtime_read_failed = 0;
+static char uops_status_message[256] = "not initialized";
+
+static int validate_uops_event_profile(void)
+{
+    unsigned int eax, ebx, ecx, edx;
+    unsigned int family, model;
+    char vendor[13];
+
+    if (!__get_cpuid(0, &eax, &ebx, &ecx, &edx)) {
+        snprintf(uops_status_message, sizeof(uops_status_message),
+                 "CPUID unavailable; cannot validate raw UOPS event profile");
+        return -1;
+    }
+    memcpy(vendor, &ebx, 4);
+    memcpy(vendor + 4, &edx, 4);
+    memcpy(vendor + 8, &ecx, 4);
+    vendor[12] = '\0';
+    if (strcmp(vendor, "GenuineIntel") != 0 ||
+        !__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+        snprintf(uops_status_message, sizeof(uops_status_message),
+                 "raw UOPS profile requires GenuineIntel CPUID");
+        return -1;
+    }
+
+    family = (eax >> 8) & 0xf;
+    model = (eax >> 4) & 0xf;
+    if (family == 0xf) {
+        family += (eax >> 20) & 0xff;
+    }
+    if (family == 0x6 || family == 0xf) {
+        model += ((eax >> 16) & 0xf) << 4;
+    }
+    if (family != 6 || model != 85) {
+        snprintf(uops_status_message, sizeof(uops_status_message),
+                 "raw UOPS profile is Cascade Lake/Skylake-SP only; "
+                 "detected family=%u model=%u", family, model);
+        return -1;
+    }
+    return 0;
+}
 
 /* ---- rdpmc 可用性探测 ---- */
 
@@ -111,13 +154,18 @@ static inline uint64_t read_pmc_rdpmc(uint32_t counter)
     return ((uint64_t)hi << 32) | lo;
 }
 
-static inline uint64_t read_pmc_fd(int fd)
+static int read_pmc_fd_checked(int fd, uint64_t *value)
 {
-    uint64_t val = 0;
-    if (read(fd, &val, sizeof(val)) != sizeof(val)) {
-        return 0;
+    ssize_t n;
+
+    if (fd < 0 || value == NULL) {
+        errno = EINVAL;
+        return -1;
     }
-    return val;
+    do {
+        n = read(fd, value, sizeof(*value));
+    } while (n < 0 && errno == EINTR);
+    return n == (ssize_t)sizeof(*value) ? 0 : -1;
 }
 
 /* ---- 内部: 配置一个 PMC ---- */
@@ -174,8 +222,14 @@ void pmu_uops_snap_before(void)
         snap_issued  = read_pmc_rdpmc(pmc_idx_issued);
         snap_retired = read_pmc_rdpmc(pmc_idx_retired);
     } else {
-        snap_issued  = read_pmc_fd(fd_uops_issued);
-        snap_retired = read_pmc_fd(fd_uops_retired);
+        if (read_pmc_fd_checked(fd_uops_issued, &snap_issued) != 0 ||
+            read_pmc_fd_checked(fd_uops_retired, &snap_retired) != 0) {
+            uops_runtime_read_failed = 1;
+            uops_status_code = errno ? errno : EIO;
+            snprintf(uops_status_message, sizeof(uops_status_message),
+                     "runtime snapshot-before read failed: %s",
+                     strerror(uops_status_code));
+        }
     }
 }
 
@@ -183,14 +237,21 @@ void pmu_uops_snap_after(void)
 {
     uint64_t now_issued, now_retired;
 
-    if (!uops_available) return;
+    if (!uops_available || uops_runtime_read_failed) return;
 
     if (use_rdpmc) {
         now_issued  = read_pmc_rdpmc(pmc_idx_issued);
         now_retired = read_pmc_rdpmc(pmc_idx_retired);
     } else {
-        now_issued  = read_pmc_fd(fd_uops_issued);
-        now_retired = read_pmc_fd(fd_uops_retired);
+        if (read_pmc_fd_checked(fd_uops_issued, &now_issued) != 0 ||
+            read_pmc_fd_checked(fd_uops_retired, &now_retired) != 0) {
+            uops_runtime_read_failed = 1;
+            uops_status_code = errno ? errno : EIO;
+            snprintf(uops_status_message, sizeof(uops_status_message),
+                     "runtime snapshot-after read failed: %s",
+                     strerror(uops_status_code));
+            return;
+        }
     }
 
     if (uops_cnt < MAX_UOPS_SAMPLES) {
@@ -208,11 +269,57 @@ void pmu_uops_snap_after(void)
 void pmu_uops_print_results(void)
 {
     int i;
+    if (!uops_available || uops_runtime_read_failed) {
+        printf("UOPS_PMU_STATUS=ERROR code=%d detail=%s\n",
+               uops_status_code, uops_status_message);
+    } else {
+        printf("UOPS_PMU_STATUS=OK mode=%s\n",
+               use_rdpmc ? "rdpmc" : "read_syscall");
+    }
     for (i = 0; i < uops_cnt; i++) {
         printf("UOPS_TRANSIENT[%d]=%d\n",      i, transient_arr[i]);
         printf("UOPS_ISSUED_DELTA[%d]=%u\n",   i, issued_delta_arr[i]);
         printf("UOPS_RETIRED_DELTA[%d]=%u\n",  i, retired_delta_arr[i]);
     }
+}
+
+int pmu_uops_preflight(uint64_t *issued_value, uint64_t *retired_value)
+{
+    if (!uops_available) {
+        return -1;
+    }
+    if (read_pmc_fd_checked(fd_uops_issued, issued_value) != 0) {
+        uops_status_code = errno ? errno : EIO;
+        snprintf(uops_status_message, sizeof(uops_status_message),
+                 "UOPS_ISSUED event read failed: %s",
+                 strerror(uops_status_code));
+        return -1;
+    }
+    if (read_pmc_fd_checked(fd_uops_retired, retired_value) != 0) {
+        uops_status_code = errno ? errno : EIO;
+        snprintf(uops_status_message, sizeof(uops_status_message),
+                 "UOPS_RETIRED event read failed: %s",
+                 strerror(uops_status_code));
+        return -1;
+    }
+    uops_status_code = 0;
+    snprintf(uops_status_message, sizeof(uops_status_message), "ok");
+    return 0;
+}
+
+int pmu_uops_get_status_code(void)
+{
+    return uops_status_code;
+}
+
+const char *pmu_uops_get_status_message(void)
+{
+    return uops_status_message;
+}
+
+const char *pmu_uops_get_mode(void)
+{
+    return use_rdpmc ? "rdpmc" : "read_syscall";
 }
 
 int pmu_uops_get_count(void)
@@ -242,10 +349,20 @@ static void pmu_uops_auto_init(void)
 {
     int mmap_ok_issued = 0, mmap_ok_retired = 0;
 
+    if (validate_uops_event_profile() != 0) {
+        uops_status_code = ENOTSUP;
+        fprintf(stderr, "[pmu_uops] %s\n", uops_status_message);
+        return;
+    }
+
     fd_uops_issued  = setup_pmc(RAW_UOPS_ISSUED);
     fd_uops_retired = setup_pmc(RAW_UOPS_RETIRED);
 
     if (fd_uops_issued < 0 || fd_uops_retired < 0) {
+        uops_status_code = errno ? errno : EIO;
+        snprintf(uops_status_message, sizeof(uops_status_message),
+                 "cannot open raw UOPS events: %s",
+                 strerror(uops_status_code));
         fprintf(stderr, "[pmu_uops] Cannot open UOPS events. "
                         "UOPS measurement disabled.\n");
         uops_available = 0;
@@ -274,6 +391,8 @@ static void pmu_uops_auto_init(void)
     }
 
     uops_available = 1;
+    uops_status_code = 0;
+    snprintf(uops_status_message, sizeof(uops_status_message), "ok");
     fprintf(stderr, "[pmu_uops] Initialized (mode=%s)\n",
             use_rdpmc ? "rdpmc" : "read_syscall");
 }

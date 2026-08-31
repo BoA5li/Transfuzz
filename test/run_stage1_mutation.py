@@ -84,10 +84,12 @@ def main():
         sys.exit(1)
 
     if not os.path.exists(args.pmu_uops_obj):
-        sys.stderr.write("Warning: {} not found.\n".format(args.pmu_uops_obj))
+        sys.stderr.write("Error: {} not found.\n".format(args.pmu_uops_obj))
         sys.stderr.write(
             "Build: gcc -c pmu_uops_rdpmc.c -o pmu_uops_rdpmc.o\n")
-        sys.stderr.write("UOPS measurement will be disabled.\n")
+        sys.stderr.write(
+            "Stage 1 requires readable UOPS PMU measurements and will stop.\n")
+        return 2
 
     config = {
         "victim_c": args.victim_c,

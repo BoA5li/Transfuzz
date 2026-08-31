@@ -24,8 +24,9 @@ import time
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
 from stage1_evaluator import stage1_evaluate, detect_period, \
-    parse_brmisp_deltas, parse_uops_transient, \
+    parse_brmisp_deltas, parse_uops_transient, parse_uops_pmu_status, \
     DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
+from uops_pmu_preflight import run_uops_pmu_preflight
 
 logger = logging.getLogger("stage1")
 
@@ -71,6 +72,7 @@ class Stage1Controller(object):
             "run_timeout": 0,         # 运行超时
             "eval_exception": 0,      # 评估流程异常
             "no_op_mutation": 0,
+            "uops_pmu_unavailable": 0,
         }
 
         # 加载分析器输出
@@ -171,6 +173,41 @@ class Stage1Controller(object):
         """
 
         logger.info("=" * 60)
+        logger.info("Stage 1: UOPS PMU preflight")
+        logger.info("=" * 60)
+
+        preflight = run_uops_pmu_preflight(
+            self.cc, self.pmu_uops_obj, self.work_dir,
+            compile_timeout=self.compile_timeout,
+            run_timeout=min(self.run_timeout, 10))
+        preflight_report = os.path.join(
+            self.work_dir, "uops_pmu_preflight.json")
+        try:
+            with open(preflight_report, "w") as report_file:
+                json.dump(preflight, report_file, indent=2, sort_keys=True)
+        except (OSError, TypeError) as exc:
+            self.framework_error = (
+                "cannot persist UOPS PMU preflight report: {}".format(exc))
+            logger.error(self.framework_error)
+            return []
+        if not preflight["ok"]:
+            self.failure_stats["uops_pmu_unavailable"] += 1
+            self.framework_error = preflight["reason"]
+            logger.error("UOPS PMU preflight FAILED: {}".format(
+                preflight["reason"]))
+            logger.error(
+                "Stage 1 stopped before baseline collection; verify raw-event "
+                "support, perf_event permissions and PMU availability.")
+            return []
+        logger.info(
+            "UOPS PMU preflight PASSED: profile={}, mode={}, issued={}, "
+            "retired={} "
+            "(zero values are valid successful reads)".format(
+                preflight["profile"], preflight["mode"], preflight["issued"],
+                preflight["retired"]))
+        logger.info("UOPS PMU preflight report: {}".format(preflight_report))
+
+        logger.info("=" * 60)
         logger.info("Stage 1: Preprocessing")
         logger.info("=" * 60)
 
@@ -190,7 +227,8 @@ class Stage1Controller(object):
         if baseline_eval is None:
             logger.error("Baseline evaluation failed - this is a HARD ERROR")
             logger.error("Cannot proceed without a valid baseline measurement")
-            self.framework_error = "stage1 baseline evaluation failed"
+            if self.framework_error is None:
+                self.framework_error = "stage1 baseline evaluation failed"
             return []
 
         # 从基线评估中获取 period
@@ -242,6 +280,12 @@ class Stage1Controller(object):
 
         for round_idx in range(self.budget):
             self._mutation_round(round_idx)
+
+            if self.framework_error is not None:
+                logger.error(
+                    "Stage 1 aborted during mutation because measurement "
+                    "validity was lost: {}".format(self.framework_error))
+                return []
 
             if (round_idx + 1) % self.report_interval == 0:
                 self._report_stats(round_idx + 1)
@@ -604,6 +648,17 @@ class Stage1Controller(object):
             signal.alarm(SCORE_TIMEOUT)
 
             try:
+                uops_status, uops_status_detail = parse_uops_pmu_status(
+                    log_lines)
+                if uops_status != "ok":
+                    self.failure_stats["uops_pmu_unavailable"] += 1
+                    self.framework_error = (
+                        "UOPS PMU runtime health check failed: {}".format(
+                            uops_status_detail))
+                    logger.error(
+                        "[{}] UOPS PMU runtime health check failed: {}"
+                        .format(tag, uops_status_detail))
+                    return None
                 result = stage1_evaluate(
                     log_lines,
                     period=self.detected_period,

@@ -103,6 +103,16 @@ def parse_uops_transient(log_lines):
     return [vals.get(i, 0) for i in range(max(vals.keys()) + 1)]
 
 
+def parse_uops_pmu_status(log_lines):
+    """Return the explicit UOPS PMU runtime status marker, if present."""
+    for line in log_lines:
+        if "UOPS_PMU_STATUS=OK" in line:
+            return "ok", line.strip()
+        if "UOPS_PMU_STATUS=ERROR" in line:
+            return "error", line.strip()
+    return "missing", "UOPS_PMU_STATUS marker missing"
+
+
 # ============================================================
 # Period 自动检测
 # ============================================================

@@ -64,6 +64,16 @@ class Stage1EvaluatorContractTests(unittest.TestCase):
                 _metric(1.0, True), _metric(1.0, True),
                 brmisp_weight=0.0, uops_weight=0.0)
 
+    def test_runtime_pmu_status_distinguishes_ok_error_and_missing(self):
+        self.assertEqual(
+            evaluator.parse_uops_pmu_status(
+                ["UOPS_PMU_STATUS=OK mode=read_syscall"])[0], "ok")
+        self.assertEqual(
+            evaluator.parse_uops_pmu_status(
+                ["UOPS_PMU_STATUS=ERROR code=13 detail=denied"])[0],
+            "error")
+        self.assertEqual(evaluator.parse_uops_pmu_status([])[0], "missing")
+
 
 if __name__ == "__main__":
     unittest.main()
