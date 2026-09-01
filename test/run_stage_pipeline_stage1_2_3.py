@@ -20,11 +20,13 @@ STAGE1_PMU_EVENTS = {
     "disambiguation": (
         "pmu_stage1_disambiguation_before",
         "pmu_stage1_disambiguation_after"),
+    "return": ("pmu_stage1_return_before", "pmu_stage1_return_after"),
 }
 
 STAGE1_PMU_EVENT_MARKERS = {
     "indirect": "pmu_stage1_event_indirect_selected",
     "disambiguation": "pmu_stage1_event_disambiguation_selected",
+    "return": "pmu_stage1_event_return_selected",
 }
 
 
@@ -35,6 +37,7 @@ def normalize_stage1_pmu_event(event_name):
         "br_misp_retired.conditional": "conditional",
         "br_misp_exec.indirect": "indirect",
         "machine_clears.disambiguation": "disambiguation",
+        "br_misp_retired.return": "return",
     }
     normalized = aliases.get(normalized, normalized)
     if normalized not in STAGE1_PMU_EVENTS:

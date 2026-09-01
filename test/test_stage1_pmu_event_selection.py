@@ -45,6 +45,18 @@ class Stage1PmuEventSelectionTests(unittest.TestCase):
             SOURCE, stage1_pmu_event="MACHINE_CLEARS.DISAMBIGUATION"))
         self.assertIn("call pmu_stage1_disambiguation_before", output)
 
+    def test_return_uses_direct_event_specific_calls(self):
+        output = "".join(process_asm(SOURCE, stage1_pmu_event="return"))
+        self.assertIn("call pmu_stage1_return_before", output)
+        self.assertIn("call pmu_stage1_return_after", output)
+        self.assertIn("pmu_stage1_event_return_selected:", output)
+        self.assertNotIn("call pmu_stage1_before", output)
+
+    def test_return_full_event_name_is_accepted(self):
+        output = "".join(process_asm(
+            SOURCE, stage1_pmu_event="BR_MISP_RETIRED.RETURN"))
+        self.assertIn("call pmu_stage1_return_before", output)
+
     def test_unknown_event_fails_closed(self):
         with self.assertRaises(ValueError):
             process_asm(SOURCE, stage1_pmu_event="unknown-event")

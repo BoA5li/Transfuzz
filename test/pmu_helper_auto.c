@@ -28,9 +28,11 @@ perf_event_open_sys(struct perf_event_attr *hw_event, pid_t pid, int cpu,
 static int fd_stage1 = -1;
 static int fd_stage1_indirect = -1;
 static int fd_stage1_disambiguation = -1;
+static int fd_stage1_return = -1;
 static uint64_t stage1_before = 0;
 static uint64_t stage1_indirect_before = 0;
 static uint64_t stage1_disambiguation_before = 0;
+static uint64_t stage1_return_before = 0;
 
 #define MAX_STAGE1_SAMPLES  1024
 static uint64_t stage1_deltas[MAX_STAGE1_SAMPLES];
@@ -48,11 +50,14 @@ static int      stage1_count = 0;
 #define RAW_BR_MISP_COND  0x01C5
 #define RAW_BR_MISP_INDIRECT  0xE489
 #define RAW_MACHINE_CLEARS_DISAMBIGUATION  0x08C3
+#define RAW_BR_MISP_RETIRED_RETURN  0xF7C5
 
 /* Emitted only by preprocessing configured for the indirect event. */
 extern const unsigned char pmu_stage1_event_indirect_selected
     __attribute__((weak));
 extern const unsigned char pmu_stage1_event_disambiguation_selected
+    __attribute__((weak));
+extern const unsigned char pmu_stage1_event_return_selected
     __attribute__((weak));
 
 static int setup_stage1_event(uint64_t raw_config, const char *event_name)
@@ -147,6 +152,29 @@ void pmu_stage1_disambiguation_after(void)
     }
 }
 
+/*
+ * BR_MISP_RETIRED.RETURN
+ *   EventSel=0xC5, UMask=0xF7 => config=0xF7C5
+ *
+ * Counts retired mispredicted return branches on supported processors.  The
+ * rewriter calls this event-specific pair directly, without in-window event
+ * dispatch.
+ */
+void pmu_stage1_return_before(void)
+{
+    (void)read(fd_stage1_return, &stage1_return_before,
+               sizeof(stage1_return_before));
+}
+
+void pmu_stage1_return_after(void)
+{
+    uint64_t val = 0;
+    read(fd_stage1_return, &val, sizeof(val));
+    if (stage1_count < MAX_STAGE1_SAMPLES) {
+        stage1_deltas[stage1_count++] = val - stage1_return_before;
+    }
+}
+
 /* =============================================================
  * Stage 2: L1D miss 计数（cache probe 用）
  * ============================================================= */
@@ -201,7 +229,10 @@ __attribute__((constructor))
 static void pmu_init(void)
 {
     /* Selection happens once before main(), outside every measured window. */
-    if (&pmu_stage1_event_disambiguation_selected != NULL) {
+    if (&pmu_stage1_event_return_selected != NULL) {
+        fd_stage1_return = setup_stage1_event(
+            RAW_BR_MISP_RETIRED_RETURN, "BR_MISP_RETIRED.RETURN");
+    } else if (&pmu_stage1_event_disambiguation_selected != NULL) {
         fd_stage1_disambiguation = setup_stage1_event(
             RAW_MACHINE_CLEARS_DISAMBIGUATION,
             "MACHINE_CLEARS.DISAMBIGUATION");
@@ -221,5 +252,6 @@ static void pmu_fini(void)
     if (fd_stage1   != -1) close(fd_stage1);
     if (fd_stage1_indirect != -1) close(fd_stage1_indirect);
     if (fd_stage1_disambiguation != -1) close(fd_stage1_disambiguation);
+    if (fd_stage1_return != -1) close(fd_stage1_return);
     if (fd_l1d_miss != -1) close(fd_l1d_miss);
 }
