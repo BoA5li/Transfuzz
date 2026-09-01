@@ -39,7 +39,24 @@ static int stage1_open_errno = 0;
 
 #define MAX_STAGE1_SAMPLES  1024
 static uint64_t stage1_deltas[MAX_STAGE1_SAMPLES];
+static unsigned char stage1_phases[MAX_STAGE1_SAMPLES];
 static int      stage1_count = 0;
+static unsigned char stage1_current_phase = 0;
+
+#define PMU_STAGE1_PHASE_UNSET   0
+#define PMU_STAGE1_PHASE_TRAIN   1
+#define PMU_STAGE1_PHASE_DETECT  2
+
+/* Called outside STAGE1_BEGIN/END, once before every measured invocation. */
+void pmu_stage1_set_phase(int phase)
+{
+    if (phase == PMU_STAGE1_PHASE_TRAIN ||
+        phase == PMU_STAGE1_PHASE_DETECT) {
+        stage1_current_phase = (unsigned char)phase;
+    } else {
+        stage1_current_phase = PMU_STAGE1_PHASE_UNSET;
+    }
+}
 
 /*
  * BR_MISP_RETIRED.CONDITIONAL
@@ -97,12 +114,15 @@ static void stage1_read_after(int fd, uint64_t before)
     if (!stage1_before_valid || fd < 0 ||
         read(fd, &value, sizeof(value)) != sizeof(value)) {
         stage1_before_valid = 0;
+        stage1_current_phase = PMU_STAGE1_PHASE_UNSET;
         return;
     }
     stage1_before_valid = 0;
     if (stage1_count < MAX_STAGE1_SAMPLES) {
         stage1_deltas[stage1_count++] = value - before;
+        stage1_phases[stage1_count - 1] = stage1_current_phase;
     }
+    stage1_current_phase = PMU_STAGE1_PHASE_UNSET;
 }
 
 /* Probe the exact event descriptor used by the production helper. */
@@ -285,6 +305,13 @@ static void pmu_init(void)
 __attribute__((destructor))
 static void pmu_fini(void)
 {
+    int i;
+    for (i = 0; i < stage1_count; ++i) {
+        const char *phase = "UNSET";
+        if (stage1_phases[i] == PMU_STAGE1_PHASE_TRAIN) phase = "TRAIN";
+        if (stage1_phases[i] == PMU_STAGE1_PHASE_DETECT) phase = "DETECT";
+        printf("STAGE1_PHASE[%d]=%s\n", i, phase);
+    }
     if (fd_stage1   != -1) close(fd_stage1);
     if (fd_stage1_indirect != -1) close(fd_stage1_indirect);
     if (fd_stage1_disambiguation != -1) close(fd_stage1_disambiguation);

@@ -194,7 +194,6 @@ def run_cmd(cmd, cwd=None):
 def build_and_run_from_s(s_file: Path,
                          pmu_helper_obj: Path,
                          post_script: Path,
-                         period: int,
                          tag: str):
     """
     从一个已存在的 .s 出发：
@@ -241,12 +240,11 @@ def build_and_run_from_s(s_file: Path,
         sys.exit(res.returncode)
 
     # 后处理
-    run_cmd(["python3", str(post_script), "-p", str(period), str(log_file)])
+    run_cmd(["python3", str(post_script), str(log_file)])
 
 def pipeline_two_rounds_from_c(c_file: Path,
                                pmu_helper_obj: Path,
                                post_script: Path,
-                               period: int,
                                gcc="gcc"):
     """
     从 .c 起跑两轮实验：
@@ -281,7 +279,7 @@ def pipeline_two_rounds_from_c(c_file: Path,
     print("[INFO] Instrumented assembly written back to {}".format(s_file))
 
     # 从 s_file 构建并运行（tag='stage1'）
-    build_and_run_from_s(s_file, pmu_helper_obj, post_script, period, tag="stage1")
+    build_and_run_from_s(s_file, pmu_helper_obj, post_script, tag="stage1")
 
     # === 第二轮：STAGE1 窗口 all-nop 对照 ===
     # 新的 .s 文件，不覆盖原 s_file
@@ -294,7 +292,8 @@ def pipeline_two_rounds_from_c(c_file: Path,
     print("[INFO] All-nop STAGE1 assembly written to {}".format(s_nop_file))
 
     # 从 s_nop_file 构建并运行（tag='stage1_nop'）
-    build_and_run_from_s(s_nop_file, pmu_helper_obj, post_script, period, tag="stage1_nop")
+    build_and_run_from_s(s_nop_file, pmu_helper_obj, post_script,
+                         tag="stage1_nop")
 
 def process_asm_only(asm_file: Path):
     """仅对已有的 .s 做插桩 + NOP_REGION 处理（就地覆盖原文件）。"""
@@ -320,8 +319,6 @@ def main():
                     help="Path to pmu_helper object file (default: pmu_helper_auto.o)")
     ap.add_argument("--post-script", default="post_test_stage_auto.py",
                     help="Post-process script (default: post_test_stage_auto.py)")
-    ap.add_argument("-p", "--period", type=int, default=10,
-                    help="Train/attack period for post-process script (default: 10)")
     ap.add_argument("--gcc", default="gcc", help="gcc executable (default: gcc)")
 
     args = ap.parse_args()
@@ -333,7 +330,6 @@ def main():
             c_file=inp,
             pmu_helper_obj=Path(args.pmu_helper_obj),
             post_script=Path(args.post_script),
-            period=args.period,
             gcc=args.gcc,
         )
     elif inp.suffix == ".s":

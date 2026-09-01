@@ -3,7 +3,7 @@
 stage1_controller.py
 
 Stage 1 变异循环主控（优化版 v2）。
-- period 自动检测
+- 逐样本 TRAIN/DETECT 运行时标签
 - passed 种子同时加入 passed_seeds 和种子库
 - 同阶段可重复变异同一位置
 - 入库判定: score > 库中最差（严格判定，无论池是否已满）
@@ -23,8 +23,7 @@ import time
 
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
-from stage1_evaluator import stage1_evaluate, detect_period, \
-    parse_brmisp_deltas, parse_uops_transient, parse_uops_pmu_status, \
+from stage1_evaluator import stage1_evaluate, parse_uops_pmu_status, \
     DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
 from uops_pmu_preflight import run_uops_pmu_preflight
 from stage1_pmu_preflight import run_stage1_pmu_preflight
@@ -39,9 +38,6 @@ class Stage1Controller(object):
         self.config = config
 
         self.victim_c = config["victim_c"]
-        # period=None 表示自动检测
-        self.period = config.get("period", None)
-
         self.budget = config.get("budget", 1000)
         self.work_dir = config.get("work_dir", "./stage1_work")
         self.cc = config.get("cc", "gcc")
@@ -76,6 +72,7 @@ class Stage1Controller(object):
             "no_op_mutation": 0,
             "uops_pmu_unavailable": 0,
             "stage1_pmu_unavailable": 0,
+            "phase_contract_invalid": 0,
         }
 
         # 加载分析器输出
@@ -116,9 +113,6 @@ class Stage1Controller(object):
         os.makedirs(self.work_dir, exist_ok=True)
         self.passed_seeds = []
         self.framework_error = None
-
-        # 检测到的 period（基线阶段确定后固定使用）
-        self.detected_period = self.period
 
         logger.info("Stage 1 Controller initialized:")
         logger.info("  budget={}, run_timeout={}s, compile_timeout={}s".format(
@@ -270,12 +264,6 @@ class Stage1Controller(object):
                 self.framework_error = "stage1 baseline evaluation failed"
             return []
 
-        # 从基线评估中获取 period
-        self.detected_period = baseline_eval.get("period", self.period)
-        if self.detected_period is None:
-            self.detected_period = 6
-            logger.warning("Period detection failed, using default 6")
-
         seed_0.score = baseline_eval["score"]
         seed_0.eval_detail = baseline_eval
 
@@ -286,10 +274,11 @@ class Stage1Controller(object):
         br = baseline_eval["brmisp"]
         uops = baseline_eval["uops"]
         logger.info("Baseline score: {:.4f}".format(baseline_eval["score"]))
-        logger.info("  Detected period: {} (confidence: {:.3f}, method: {})".format(
-            self.detected_period,
-            baseline_eval.get("period_confidence", 0),
-            baseline_eval.get("period_detail", "unknown")))
+        logger.info(
+            "  Runtime phases: train={}, detect={}, contract={}".format(
+                baseline_eval.get("train_count", 0),
+                baseline_eval.get("detect_count", 0),
+                baseline_eval.get("phase_contract", "unknown")))
         logger.info("  BR_MISP: passed={}, score={:.4f}, "
                     "baseline_mean={}, baseline_range={}, "
                     "stability={:.3f}, elevation_rate={:.3f}, "
@@ -700,10 +689,16 @@ class Stage1Controller(object):
                     return None
                 result = stage1_evaluate(
                     log_lines,
-                    period=self.detected_period,
                     brmisp_weight=self.brmisp_weight,
                     uops_weight=self.uops_weight,
                 )
+                if result.get("phase_contract") != "ok":
+                    self.failure_stats["phase_contract_invalid"] += 1
+                    self.framework_error = (
+                        "Stage 1 runtime phase contract failed: {}".format(
+                            result.get("phase_contract", "missing")))
+                    logger.error("[{}] {}".format(tag, self.framework_error))
+                    return None
                 signal.alarm(0)
                 logger.debug("[{}] ❤️ Step 4-5: compute score done".format(tag))
                 return result
@@ -1045,7 +1040,8 @@ class Stage1Controller(object):
             logger.info(
                 "  Failures: process={}, sanity={}, compile={} (timeout={}), "
                 "run={} (timeout={}), eval_exc={}, no_op={}, "
-                "stage1_pmu_unavailable={}, uops_pmu_unavailable={}"
+                "stage1_pmu_unavailable={}, uops_pmu_unavailable={}, "
+                "phase_contract_invalid={}"
                 .format(
                     self.failure_stats["process_failed"],
                     self.failure_stats["sanity_failed"],
@@ -1056,7 +1052,8 @@ class Stage1Controller(object):
                     self.failure_stats["eval_exception"],
                     self.failure_stats["no_op_mutation"],
                     self.failure_stats["stage1_pmu_unavailable"],
-                    self.failure_stats["uops_pmu_unavailable"]))
+                    self.failure_stats["uops_pmu_unavailable"],
+                    self.failure_stats["phase_contract_invalid"]))
 
         best = self.seed_pool.get_best_seed()
         if best and best.eval_detail:
@@ -1092,6 +1089,8 @@ class Stage1Controller(object):
             self.failure_stats["stage1_pmu_unavailable"]))
         logger.info("  uops_pmu_unavailable:   {}".format(
             self.failure_stats["uops_pmu_unavailable"]))
+        logger.info("  phase_contract_invalid: {}".format(
+            self.failure_stats["phase_contract_invalid"]))
         
         total_attempts = total_failures + self.seed_pool.total_added
         if total_attempts > 0:

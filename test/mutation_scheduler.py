@@ -183,6 +183,10 @@ PROTECTED_LABELS = frozenset({
 PROTECTED_CALL_TARGETS = frozenset({
     # PMU
     "pmu_stage1_before", "pmu_stage1_after",
+    "pmu_stage1_indirect_before", "pmu_stage1_indirect_after",
+    "pmu_stage1_disambiguation_before", "pmu_stage1_disambiguation_after",
+    "pmu_stage1_return_before", "pmu_stage1_return_after",
+    "pmu_stage1_set_phase",
     "pmu_read_l1d_miss", "pmu_read_uops",
     # Victim Framework API
     "vf_run_attack_once",

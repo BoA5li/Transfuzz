@@ -85,7 +85,6 @@ def run_pipeline(args):
 
     s1_config = {
         "victim_c": args.input,           # Stage1Controller 使用 victim_c
-        "period": args.period,
         "budget": args.s1_budget,
         "pool_size": args.s1_pool_size,
         "anchors_json": args.anchors_json,
@@ -356,9 +355,6 @@ def main():
     # 通用参数
     ap.add_argument("--gcc", default="gcc",
                     help="GCC compiler (default: gcc)")
-    ap.add_argument("-p", "--period", type=int, default=6,
-                    help="Train/attack period for Stage 1 "
-                         "(default: 6)")
     ap.add_argument("--driver-c",
                     default="auto_stage1_2_3_driver.c",
                     help="Stage 2/3 driver C file")

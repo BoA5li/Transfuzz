@@ -46,6 +46,23 @@ extern void     pmu_uops_print_results(void);
 extern int      pmu_uops_get_count(void);
 extern int32_t  pmu_uops_get_transient(int i);
 
+/* Runtime phase contract; include this header in concrete inputs. */
+#include "stage1_phase.h"
+
+/*
+ * Before EVERY call that produces one PMU sample, mark the semantic role
+ * derived from the same runtime predicate/mask that selects the call input:
+ *
+ *   pmu_stage1_set_phase(is_detection
+ *       ? PMU_STAGE1_PHASE_DETECT : PMU_STAGE1_PHASE_TRAIN);
+ *   victim_function(selected_input);
+ *
+ * Do not infer the role from a variable name or a fixed loop period.  Keep
+ * this marker outside STAGE1_BEGIN/END.  Zero training calls are representable
+ * but cannot establish a within-run training baseline, so evaluation fails
+ * closed with empty_group rather than inventing one.
+ */
+
 /* ------------------------------------------------------------
  *  [必需 6] Victim / Gadget 函数 —— PMU 插桩位置
  *

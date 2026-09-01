@@ -11,6 +11,7 @@
 #pragma optimize("gt",on)
 #else
 #include <x86intrin.h>
+#include "stage1_phase.h"
 #endif
 
 #define NOP_REGION_BEGIN asm volatile("# NOP_REGION_BEGIN");
@@ -98,6 +99,8 @@ void stage1_mistrain_trigger(size_t malicious_x) {
 
         x = ((j % 6) - 1) & ~0xFFFF;
         x = (x | (x >> 16));
+        pmu_stage1_set_phase(
+            x ? PMU_STAGE1_PHASE_DETECT : PMU_STAGE1_PHASE_TRAIN);
         x = training_x ^ (x & (malicious_x ^ training_x));
 
         spectre_function(x);

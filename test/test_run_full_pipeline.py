@@ -19,7 +19,7 @@ from seed_pool import Seed
 def _args(work_dir):
     return Namespace(
         input="victim.c", work_dir=work_dir, expected_secret="Y",
-        period=6, s1_budget=0, s1_pool_size=2, s2_budget=0,
+        s1_budget=0, s1_pool_size=2, s2_budget=0,
         s2_pool_size=2, s3_budget=0, s3_pool_size=2,
         anchors_json=None, strong_objects_json=None, gcc="gcc",
         pmu_helper_obj="pmu.o", pmu_uops_obj="uops.o",

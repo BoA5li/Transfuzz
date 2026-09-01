@@ -18,14 +18,16 @@ def _metric(score, passed, detail="ok"):
 class Stage1EvaluatorContractTests(unittest.TestCase):
     def _evaluate(self, brmisp, uops, **weights):
         with mock.patch.object(evaluator, "parse_brmisp_deltas",
-                               return_value=[]), \
+                               return_value=[0, 1]), \
                 mock.patch.object(evaluator, "parse_uops_transient",
-                                  return_value=[]), \
+                                  return_value=[0, 1]), \
+                mock.patch.object(evaluator, "parse_stage1_phases",
+                                  return_value=["TRAIN", "DETECT"]), \
                 mock.patch.object(evaluator, "brmisp_pattern_score",
                                   return_value=brmisp), \
                 mock.patch.object(evaluator, "uops_transient_score",
                                   return_value=uops):
-            return evaluator.stage1_evaluate([], period=6, **weights)
+            return evaluator.stage1_evaluate([], **weights)
 
     def test_both_metrics_must_pass(self):
         cases = [
@@ -73,6 +75,44 @@ class Stage1EvaluatorContractTests(unittest.TestCase):
                 ["UOPS_PMU_STATUS=ERROR code=13 detail=denied"])[0],
             "error")
         self.assertEqual(evaluator.parse_uops_pmu_status([])[0], "missing")
+
+    def test_phase_parser_preserves_runtime_sample_order(self):
+        self.assertEqual(
+            evaluator.parse_stage1_phases([
+                "STAGE1_PHASE[1]=DETECT",
+                "STAGE1_PHASE[0]=TRAIN",
+            ]),
+            ["TRAIN", "DETECT"])
+
+    def test_missing_phase_contract_fails_closed(self):
+        result = evaluator.stage1_evaluate([
+            "STAGE1_DELTA_BR_MISP_COND[0]=0",
+            "UOPS_TRANSIENT[0]=0",
+        ])
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["phase_contract"], "phase_contract_missing")
+
+    def test_runtime_labels_allow_non_periodic_training_counts(self):
+        phases = ["TRAIN", "DETECT", "TRAIN", "TRAIN", "DETECT"]
+        brmisp = evaluator.brmisp_pattern_score([0, 1, 0, 0, 1], phases)
+        uops = evaluator.uops_transient_score([0, 8, 0, 0, 9], phases)
+
+        self.assertEqual(brmisp["train_count"], 3)
+        self.assertEqual(brmisp["detect_count"], 2)
+        self.assertEqual(uops["train_count"], 3)
+        self.assertEqual(uops["detect_count"], 2)
+
+    def test_zero_training_rounds_are_represented_but_not_invented(self):
+        phases = ["DETECT", "DETECT"]
+        brmisp = evaluator.brmisp_pattern_score([1, 1], phases)
+        uops = evaluator.uops_transient_score([8, 9], phases)
+
+        self.assertEqual(brmisp["train_count"], 0)
+        self.assertEqual(brmisp["detail"], "empty_group")
+        self.assertFalse(brmisp["passed"])
+        self.assertEqual(uops["train_count"], 0)
+        self.assertEqual(uops["detail"], "empty_group")
+        self.assertFalse(uops["passed"])
 
 
 if __name__ == "__main__":

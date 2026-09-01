@@ -3,7 +3,7 @@
 stage1_evaluator.py
 
 Stage 1 种子评分模块。
-- 支持自动 period 检测（无需手动指定）
+- 使用目标程序提供的逐样本 TRAIN/DETECT 运行时标签
 - BR_MISP baseline 使用阈值范围去噪
 - UOPS 阈值自适应
 Compatible with Python 3.6+.
@@ -113,190 +113,17 @@ def parse_uops_pmu_status(log_lines):
     return "missing", "UOPS_PMU_STATUS marker missing"
 
 
-# ============================================================
-# Period 自动检测
-# ============================================================
-
-def _autocorrelation(data, lag):
-    """
-    计算归一化自相关系数。
-    对数据减去均值后，计算 lag 处的自相关。
-    返回值范围 [-1, 1]，1 表示完美正相关。
-    """
-    n = len(data)
-    if lag >= n or lag <= 0:
-        return 0.0
-    m = _mean(data)
-    centered = [x - m for x in data]
-
-    numerator = 0.0
-    for i in range(n - lag):
-        numerator += centered[i] * centered[i + lag]
-
-    denominator = sum(c * c for c in centered)
-    if denominator < 1e-12:
-        return 0.0
-    return numerator / denominator
-
-
-def _detect_period_autocorrelation(data, min_period=3, max_period=None):
-    """
-    通过自相关分析检测周期。
-
-    原理:
-      如果数据有周期 P，那么自相关函数在 lag=P, 2P, 3P... 处会有峰值。
-      扫描所有候选 lag，找到自相关系数最高的 lag 作为 period。
-
-    参数:
-      data:       一维数值序列
-      min_period: 最小候选周期（默认 3，因为 period<3 无意义）
-      max_period: 最大候选周期（默认 len(data)//3，确保至少 3 个完整周期）
-
-    返回:
-      (best_period, confidence)
-      confidence 是最佳 period 的自相关系数，[0, 1]。
-      > 0.3 通常认为有可靠周期。
-    """
-    n = len(data)
-    if n < 6:
-        return None, 0.0
-
-    if max_period is None:
-        max_period = n // 3
-
-    max_period = min(max_period, n // 2)
-    if max_period < min_period:
-        return None, 0.0
-
-    best_lag = None
-    best_corr = -1.0
-
-    for lag in range(min_period, max_period + 1):
-        corr = _autocorrelation(data, lag)
-        if corr > best_corr:
-            best_corr = corr
-            best_lag = lag
-
-    if best_lag is None or best_corr < 0.1:
-        return None, 0.0
-
-    return best_lag, best_corr
-
-
-def _detect_period_peak_spacing(data, min_period=3, max_period=None):
-    """
-    通过峰值间距检测周期。
-
-    原理:
-      攻击轮的 delta 通常高于训练轮。
-      找出所有「高于中位数 + 阈值」的峰值位置，
-      计算相邻峰值的间距，取间距的众数作为 period。
-
-    这个方法与自相关互补——自相关对正弦型周期更敏感，
-    峰值间距对脉冲型周期（训练-训练-训练-攻击-训练-训练...）更敏感。
-    """
-    n = len(data)
-    if n < 6:
-        return None, 0.0
-
-    if max_period is None:
-        max_period = n // 3
-
-    med = _median(data)
-    mad_val = _mad(data)
-    # 峰值阈值: 中位数 + 1.5 * MAD（自适应）
-    threshold = med + max(mad_val * 1.5, 0.5)
-
-    peak_indices = [i for i, v in enumerate(data) if v > threshold]
-
-    if len(peak_indices) < 2:
-        return None, 0.0
-
-    # 计算相邻峰值的间距
-    spacings = []
-    for i in range(1, len(peak_indices)):
-        s = peak_indices[i] - peak_indices[i - 1]
-        if min_period <= s <= max_period:
-            spacings.append(s)
-
-    if not spacings:
-        return None, 0.0
-
-    spacing_mode, spacing_count = _counter_most_common(spacings)
-    consistency = spacing_count / float(len(spacings))
-
-    return spacing_mode, consistency
-
-
-def detect_period(brmisp_deltas, uops_transients, min_period=3, max_period=None):
-    """
-    综合两个数据源自动检测 period。
-
-    策略:
-      1. 分别对 BR_MISP 和 UOPS 做自相关检测
-      2. 分别做峰值间距检测
-      3. 如果多个方法同意某个 period，confidence 叠加
-      4. 返回 confidence 最高的 period
-
-    返回:
-      (period, confidence, method_detail)
-    """
-    candidates = {}  # period → [(confidence, method_name)]
-
-    # 方法 1: BR_MISP 自相关
-    if brmisp_deltas and len(brmisp_deltas) >= 6:
-        p, c = _detect_period_autocorrelation(brmisp_deltas, min_period, max_period)
-        if p is not None and c > 0.1:
-            candidates.setdefault(p, []).append((c, "brmisp_autocorr"))
-
-    # 方法 2: UOPS 自相关
-    if uops_transients and len(uops_transients) >= 6:
-        p, c = _detect_period_autocorrelation(uops_transients, min_period, max_period)
-        if p is not None and c > 0.1:
-            candidates.setdefault(p, []).append((c, "uops_autocorr"))
-
-    # 方法 3: BR_MISP 峰值间距
-    if brmisp_deltas and len(brmisp_deltas) >= 6:
-        p, c = _detect_period_peak_spacing(brmisp_deltas, min_period, max_period)
-        if p is not None and c > 0.3:
-            candidates.setdefault(p, []).append((c, "brmisp_peak"))
-
-    # 方法 4: UOPS 峰值间距
-    if uops_transients and len(uops_transients) >= 6:
-        p, c = _detect_period_peak_spacing(uops_transients, min_period, max_period)
-        if p is not None and c > 0.3:
-            candidates.setdefault(p, []).append((c, "uops_peak"))
-
-    if not candidates:
-        return None, 0.0, "no_period_detected"
-
-    # 每个候选 period 的综合 confidence:
-    #   多方法一致 → 加分
-    #   单方法高 confidence → 也可以
-    best_period = None
-    best_score = -1.0
-    best_detail = ""
-
-    for period, entries in candidates.items():
-        # 基础分: 各方法 confidence 之和
-        total_conf = sum(c for c, _ in entries)
-        # 一致性加分: 多个方法同意同一个 period
-        agreement_bonus = len(entries) * 0.15
-        combined = total_conf + agreement_bonus
-
-        methods_str = "+".join(m for _, m in entries)
-
-        if combined > best_score:
-            best_score = combined
-            best_period = period
-            best_detail = "period={}, methods=[{}], conf={:.3f}".format(
-                period, methods_str, combined)
-
-    # 归一化 confidence 到 [0, 1]
-    # 最高可能: 4 方法 × 1.0 + 4 × 0.15 = 4.6
-    normalized_conf = min(best_score / 2.0, 1.0)
-
-    return best_period, normalized_conf, best_detail
+def parse_stage1_phases(log_lines):
+    """Parse the explicit runtime phase associated with every PMU sample."""
+    pattern = re.compile(r"STAGE1_PHASE\[(\d+)\]\s*=\s*(\S+)")
+    vals = {}
+    for line in log_lines:
+        match = pattern.search(line)
+        if match:
+            vals[int(match.group(1))] = match.group(2).upper()
+    if not vals:
+        return []
+    return [vals.get(i, "MISSING") for i in range(max(vals.keys()) + 1)]
 
 
 # ============================================================
@@ -340,12 +167,12 @@ def _compute_baseline_range(train_data, tolerance_factor=1.5):
     return baseline_value, baseline_low, baseline_high, clean, noise_count
 
 
-def brmisp_pattern_score(deltas, period):
+def brmisp_pattern_score(deltas, phases):
     """
     BR_MISP 模式匹配评分（优化版）。
 
     逻辑：
-    1. 按 period 分组为 train/attack
+    1. 按逐样本运行时标签分组为 train/detect
     2. 对 train 数据做阈值范围去噪，计算 baseline_mean
     3. 每轮攻击的抬升幅度 = attack_delta - baseline_mean
     4. 抬升幅度落在 [elev_low, elev_high] 范围内才算"有效抬升"
@@ -363,7 +190,8 @@ def brmisp_pattern_score(deltas, period):
     """
     result = {
         "score": 0.0, "passed": False, "detail": "ok",
-        "period": period,
+        "phase_source": "runtime_labels",
+        "train_count": 0, "detect_count": 0,
         "train_mode": None, "train_stability": 0.0,
         "baseline_value": None, "baseline_mean": None,
         "baseline_range": None,
@@ -373,21 +201,18 @@ def brmisp_pattern_score(deltas, period):
         "elevations": [],
     }
 
-    if not deltas or period is None or period < 2:
-        result["detail"] = "insufficient_data"
-        return result
-
-    if len(deltas) < period:
+    if not deltas or not phases or len(deltas) != len(phases):
         result["detail"] = "insufficient_data"
         return result
 
     # ============================================================
-    # Step 1: 按 period 分组
+    # Step 1: 按目标程序在运行时提供的真实相位标签分组
     # ============================================================
-    # 约定: 每个周期的最后一轮(index % period == period-1)是 attack
-    # 注意: 使用 (i+1) % period == 0 等价于 i % period == period-1
-    train = [d for i, d in enumerate(deltas) if (i + 1) % period != 0]
-    attack = [d for i, d in enumerate(deltas) if (i + 1) % period == 0]
+    train = [d for d, phase in zip(deltas, phases) if phase == "TRAIN"]
+    attack = [d for d, phase in zip(deltas, phases) if phase == "DETECT"]
+
+    result["train_count"] = len(train)
+    result["detect_count"] = len(attack)
 
     if not train or not attack:
         result["detail"] = "empty_group"
@@ -518,7 +343,7 @@ def _estimate_uops_saturation(train_transients):
     return min(saturation, 500)
 
 
-def uops_transient_score(transients, period):
+def uops_transient_score(transients, phases):
     """
     UOPS 瞬态窗口评分（优化版）。
 
@@ -528,21 +353,22 @@ def uops_transient_score(transients, period):
     """
     result = {
         "score": 0.0, "passed": False, "detail": "ok",
-        "period": period,
+        "phase_source": "runtime_labels",
+        "train_count": 0, "detect_count": 0,
         "speculative_uops": 0, "train_median": 0, "attack_median": 0,
         "stability": 0.0, "saturation_threshold": 100,
     }
 
-    if not transients or period is None or period < 2:
+    if not transients or not phases or len(transients) != len(phases):
         result["detail"] = "insufficient_data"
         return result
 
-    if len(transients) < period:
-        result["detail"] = "insufficient_data"
-        return result
-
-    train_t = [t for i, t in enumerate(transients) if (i + 1) % period != 0]
-    attack_t = [t for i, t in enumerate(transients) if (i + 1) % period == 0]
+    train_t = [t for t, phase in zip(transients, phases)
+               if phase == "TRAIN"]
+    attack_t = [t for t, phase in zip(transients, phases)
+                if phase == "DETECT"]
+    result["train_count"] = len(train_t)
+    result["detect_count"] = len(attack_t)
 
     if not train_t or not attack_t:
         result["detail"] = "empty_group"
@@ -606,46 +432,29 @@ DEFAULT_BRMISP_WEIGHT = 0.8
 DEFAULT_UOPS_WEIGHT = 0.2
 
 
-def stage1_evaluate(log_lines, period=None,
+def stage1_evaluate(log_lines,
                     brmisp_weight=DEFAULT_BRMISP_WEIGHT,
                     uops_weight=DEFAULT_UOPS_WEIGHT):
     """
     Stage 1 综合评分。
 
-    改进:
-    - period=None 时自动检测
-    - 返回检测到的 period 供后续使用
+    TRAIN/DETECT membership comes exclusively from explicit runtime labels.
+    No manual period or PMU-signal heuristic is used.
     """
     brmisp_deltas = parse_brmisp_deltas(log_lines)
     uops_transients = parse_uops_transient(log_lines)
+    phases = parse_stage1_phases(log_lines)
 
-    # Period 检测
-    detected_period = period
-    period_confidence = 1.0
-    period_detail = "user_specified"
-
-    if period is None:
-        detected_period, period_confidence, period_detail = \
-            detect_period(brmisp_deltas, uops_transients)
-
-        if detected_period is None:
-            # 无法检测 period，尝试常见值
-            # 扫描 [3..15]，取评分最高的
-            best_p = None
-            best_s = -1.0
-            for try_p in range(3, min(16, len(brmisp_deltas) // 2 + 1)):
-                br_eval = brmisp_pattern_score(brmisp_deltas, try_p)
-                if br_eval["score"] > best_s:
-                    best_s = br_eval["score"]
-                    best_p = try_p
-            if best_p is not None:
-                detected_period = best_p
-                period_confidence = 0.3  # 低置信度
-                period_detail = "brute_force_scan"
-            else:
-                detected_period = 6  # 最后兜底
-                period_confidence = 0.1
-                period_detail = "fallback_default"
+    phase_detail = "ok"
+    valid_phases = {"TRAIN", "DETECT"}
+    if not phases:
+        phase_detail = "phase_contract_missing"
+    elif any(phase not in valid_phases for phase in phases):
+        phase_detail = "phase_contract_invalid"
+    elif len(phases) != len(brmisp_deltas):
+        phase_detail = "brmisp_phase_count_mismatch"
+    elif len(phases) != len(uops_transients):
+        phase_detail = "uops_phase_count_mismatch"
 
     if brmisp_weight < 0 or uops_weight < 0:
         raise ValueError("Stage 1 score weights must be non-negative")
@@ -654,8 +463,9 @@ def stage1_evaluate(log_lines, period=None,
         raise ValueError("At least one Stage 1 score weight must be positive")
 
     # 评分
-    br_eval = brmisp_pattern_score(brmisp_deltas, detected_period)
-    uops_eval = uops_transient_score(uops_transients, detected_period)
+    scoring_phases = phases if phase_detail == "ok" else []
+    br_eval = brmisp_pattern_score(brmisp_deltas, scoring_phases)
+    uops_eval = uops_transient_score(uops_transients, scoring_phases)
 
     # 无效指标不贡献分数，但仍保留其权重，避免缺失指标导致剩余指标
     # 被重新归一化并获得不合理的满权重。
@@ -664,10 +474,8 @@ def stage1_evaluate(log_lines, period=None,
     combined_score = (brmisp_score * brmisp_weight +
                       uops_score * uops_weight) / total_w
 
-    if period_confidence < 0.5:
-        combined_score *= (0.5 + period_confidence)
-
     combined_passed = (
+        phase_detail == "ok" and
         (br_eval["detail"] == "ok" and br_eval["passed"]) and
         (uops_eval["detail"] == "ok" and uops_eval["passed"])
     )
@@ -675,9 +483,10 @@ def stage1_evaluate(log_lines, period=None,
     return {
         "score": combined_score,
         "passed": combined_passed,
-        "period": detected_period,
-        "period_confidence": period_confidence,
-        "period_detail": period_detail,
+        "phase_contract": phase_detail,
+        "phase_source": "runtime_labels",
+        "train_count": phases.count("TRAIN"),
+        "detect_count": phases.count("DETECT"),
         "brmisp": br_eval,
         "uops": uops_eval,
         "score_weights": {

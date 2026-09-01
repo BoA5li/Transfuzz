@@ -3,7 +3,7 @@
 run_stage1_mutation.py
 
 Stage 1 变异循环入口（优化版）。
-- -p 改为可选参数，不指定时自动检测
+- TRAIN/DETECT membership is supplied by runtime sample labels
 Compatible with Python 3.6+.
 """
 
@@ -29,10 +29,6 @@ def main():
 
     ap.add_argument("victim_c",
                     help="Path to victim C source file")
-    ap.add_argument("-p", "--period", type=int, default=None,
-                    help="Train/attack period. "
-                         "If not specified, auto-detected from PMU data.")
-
     ap.add_argument("--budget", type=int, default=1000,
                     help="Mutation budget (default: 1000)")
     ap.add_argument("--pool-size", type=int, default=200,
@@ -100,7 +96,6 @@ def main():
 
     config = {
         "victim_c": args.victim_c,
-        "period": args.period,  # None = auto-detect
         "budget": args.budget,
         "pool_size": args.pool_size,
         "anchors_json": args.anchors_json,
@@ -137,8 +132,10 @@ def main():
             seed.current_stage_mutated_pcs))
         print("    Mutations: {}".format(len(seed.mutation_history)))
         if seed.eval_detail:
-            print("    Detected period: {}".format(
-                seed.eval_detail.get("period")))
+            print("    Runtime phases: train={}, detect={}, contract={}".format(
+                seed.eval_detail.get("train_count", 0),
+                seed.eval_detail.get("detect_count", 0),
+                seed.eval_detail.get("phase_contract", "unknown")))
             br = seed.eval_detail.get("brmisp", {})
             uops = seed.eval_detail.get("uops", {})
             print("    BR_MISP: elevation_rate={:.3f}, "

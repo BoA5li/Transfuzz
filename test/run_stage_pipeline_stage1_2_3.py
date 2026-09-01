@@ -194,7 +194,7 @@ def run_cmd(cmd, cwd=None):
 
 
 def build_and_run_from_s(s_file, pmu_helper_obj, pmu_uops_obj,
-                         post_script, period, tag):
+                         post_script, tag):
     """
     从 .s 出发构建并运行。
     """
@@ -236,11 +236,11 @@ def build_and_run_from_s(s_file, pmu_helper_obj, pmu_uops_obj,
             sys.stderr.write(res.stderr.decode("utf-8", errors="ignore"))
         sys.exit(res.returncode)
 
-    run_cmd(["python3", str(post_script), "-p", str(period), str(log_file)])
+    run_cmd(["python3", str(post_script), str(log_file)])
 
 
 def pipeline_two_rounds_from_c(c_file, pmu_helper_obj, pmu_uops_obj,
-                               post_script, period, gcc="gcc",
+                               post_script, gcc="gcc",
                                stage1_pmu_event="conditional"):
     """从 .c 起跑两轮实验。"""
     c_file = Path(c_file)
@@ -262,7 +262,7 @@ def pipeline_two_rounds_from_c(c_file, pmu_helper_obj, pmu_uops_obj,
     print("[INFO] Instrumented assembly written back to {}".format(s_file))
 
     build_and_run_from_s(s_file, pmu_helper_obj, pmu_uops_obj,
-                         post_script, period, tag="stage1")
+                         post_script, tag="stage1")
 
     # 第二轮: all-nop 对照
     s_nop_file = s_file.with_name(s_file.stem + "_stage1_nop.s")
@@ -274,7 +274,7 @@ def pipeline_two_rounds_from_c(c_file, pmu_helper_obj, pmu_uops_obj,
     print("[INFO] All-nop STAGE1 assembly written to {}".format(s_nop_file))
 
     build_and_run_from_s(s_nop_file, pmu_helper_obj, pmu_uops_obj,
-                         post_script, period, tag="stage1_nop")
+                         post_script, tag="stage1_nop")
     return s_file
 
 
@@ -413,8 +413,6 @@ def main():
                          "(default: conditional)")
     ap.add_argument("--post-script", default="post_test_stage_auto.py",
                     help="Post-process script (default: post_test_stage_auto.py)")
-    ap.add_argument("-p", "--period", type=int, default=10,
-                    help="Train/attack period (default: 10)")
     ap.add_argument("--gcc", default="gcc", help="gcc executable (default: gcc)")
 
     ap.add_argument("--enable-stage2", action="store_true")
@@ -436,7 +434,6 @@ def main():
             pmu_helper_obj=args.pmu_helper_obj,
             pmu_uops_obj=pmu_uops,
             post_script=args.post_script,
-            period=args.period,
             gcc=args.gcc,
             stage1_pmu_event=args.stage1_pmu_event,
         )
