@@ -151,7 +151,6 @@ def run_pipeline(args):
         "work_dir": str(work_dir / "stage2"),
         "cc": args.gcc,
         "pmu_helper_obj": args.pmu_helper_obj,
-        "pmu_uops_obj": args.pmu_uops_obj,
         "expected_secret": expected_secret_byte,
     }
 

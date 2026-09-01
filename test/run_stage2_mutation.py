@@ -40,8 +40,6 @@ def main():
                     help="Stage 3 driver C source (provides stage3_parse_mode etc.)")
     ap.add_argument("--pmu-helper-obj",
                     default="pmu_helper_auto.o")
-    ap.add_argument("--pmu-uops-obj",
-                    default="pmu_uops_rdpmc.o")
 
     ap.add_argument("--budget", type=int, default=1000)
     ap.add_argument("--pool-size", type=int, default=200)
@@ -103,7 +101,6 @@ def main():
         "work_dir": args.work_dir,
         "cc": args.gcc,
         "pmu_helper_obj": args.pmu_helper_obj,
-        "pmu_uops_obj": args.pmu_uops_obj,
         "run_timeout": args.run_timeout,
         "early_stop_passed": args.early_stop,
         "report_interval": args.report_interval,

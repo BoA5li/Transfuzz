@@ -48,7 +48,6 @@ class Stage2Controller(object):
         self.work_dir = _abs(config.get("work_dir", "./stage2_work"))
         self.cc = config.get("cc", "gcc")
         self.pmu_helper_obj = _abs(config.get("pmu_helper_obj", "pmu_helper_auto.o"))
-        self.pmu_uops_obj = _abs(config.get("pmu_uops_obj", "pmu_uops_rdpmc.o"))
         self.expected_secret = int(config.get("expected_secret", ord('Y')))
 
         # ============================================================
@@ -572,16 +571,46 @@ class Stage2Controller(object):
             return None
 
     def _remove_stage1_instrumentation(self, asm_lines):
-        """移除 Stage 1 在汇编中插入的 PMU 插桩代码"""
+        """Remove Stage 1 measurement code without changing victim logic.
+
+        Stage 1 normally hands Stage 2 the unprocessed ``Seed.asm_path``;
+        therefore its lossy NOP-region compression and LFENCE reference exist
+        only in evaluation side files.  This cleanup still accepts instrumented
+        assembly defensively.  It removes every supported Stage 1 PMU/UOPS
+        call and complete event-selection marker sections, while retaining
+        STAGE1_BEGIN/END, NOP_REGION_BEGIN/END, and unmarked LFENCE instructions
+        because those may be part of the victim's control-flow contract.
+        """
         result = []
-        stage1_calls = [
+        stage1_calls = {
             "pmu_stage1_before",
             "pmu_stage1_after",
+            "pmu_stage1_indirect_before",
+            "pmu_stage1_indirect_after",
+            "pmu_stage1_disambiguation_before",
+            "pmu_stage1_disambiguation_after",
+            "pmu_stage1_return_before",
+            "pmu_stage1_return_after",
+            "pmu_stage1_set_phase",
             "pmu_uops_snap_before",
             "pmu_uops_snap_after",
+            "pmu_uops_print_results",
             "pmu_stage1_get_count",
             "pmu_stage1_get_delta",
-        ]
+            "pmu_uops_get_count",
+            "pmu_uops_get_transient",
+            "pmu_uops_get_issued_delta",
+            "pmu_uops_get_retired_delta",
+            "pmu_uops_get_status_code",
+            "pmu_uops_get_status_message",
+            "pmu_uops_get_mode",
+        }
+
+        event_markers = {
+            "pmu_stage1_event_indirect_selected",
+            "pmu_stage1_event_disambiguation_selected",
+            "pmu_stage1_event_return_selected",
+        }
 
         stage1_markers = [
             "STAGE1_PMU_BEGIN",
@@ -593,16 +622,41 @@ class Stage2Controller(object):
             "# --- UOPS",
         ]
 
-        for line in asm_lines:
+        # The Stage 1 rewriter emits a complete .pushsection/.popsection block
+        # for a non-default event.  Removing only the marker label would leave
+        # a global symbol and one data byte behind, so remove the whole block.
+        marker_section_lines = set()
+        section_start = None
+        for index, line in enumerate(asm_lines):
+            stripped = line.strip()
+            if stripped.startswith(".pushsection"):
+                section_start = index
+            if section_start is not None and any(
+                    marker in stripped for marker in event_markers):
+                end = section_start
+                while end < len(asm_lines):
+                    marker_section_lines.add(end)
+                    if asm_lines[end].strip().startswith(".popsection"):
+                        break
+                    end += 1
+                section_start = None
+            elif section_start is not None and stripped.startswith(
+                    ".popsection"):
+                section_start = None
+
+        call_pattern = re.compile(
+            r"^callq?\s+([A-Za-z_.$][A-Za-z0-9_.$]*)"
+            r"(?:@(?:PLT|GOTPCREL))?(?:\s|$)")
+
+        for index, line in enumerate(asm_lines):
             stripped = line.strip()
 
-            is_stage1_call = False
-            for func in stage1_calls:
-                if "call" in stripped and func in stripped:
-                    is_stage1_call = True
-                    break
+            if index in marker_section_lines:
+                result.append("# [s2-removed] {}\n".format(stripped))
+                continue
 
-            if is_stage1_call:
+            call_match = call_pattern.match(stripped)
+            if call_match and call_match.group(1) in stage1_calls:
                 result.append("# [s2-removed] {}\n".format(stripped))
                 continue
 
@@ -764,10 +818,6 @@ class Stage2Controller(object):
         # stage3_driver_safe.o
         if self.stage3_obj and os.path.exists(self.stage3_obj):
             link_cmd.append(self.stage3_obj)
-
-        # pmu_uops (可选)
-        if self.pmu_uops_obj and os.path.exists(self.pmu_uops_obj):
-            link_cmd.append(self.pmu_uops_obj)
 
         link_cmd += ["-o", exe_path]
 

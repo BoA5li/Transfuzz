@@ -106,7 +106,10 @@ def process_asm(lines,
             out.append(line)
             out.append("\tcall {}\n".format(before_symbol))
             if stage1_begin_lfence:
-                out.append("\tlfence\n")
+                # Keep provenance on the instruction so a later stage can
+                # remove this framework-owned control without deleting an
+                # LFENCE that belonged to the input program.
+                out.append("\tlfence # [stage1-lfence-baseline]\n")
             continue
 
         if stripped == "{0}:".format(end_label):
