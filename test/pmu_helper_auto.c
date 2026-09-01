@@ -33,6 +33,9 @@ static uint64_t stage1_before = 0;
 static uint64_t stage1_indirect_before = 0;
 static uint64_t stage1_disambiguation_before = 0;
 static uint64_t stage1_return_before = 0;
+static int fd_stage1_selected = -1;
+static int stage1_before_valid = 0;
+static int stage1_open_errno = 0;
 
 #define MAX_STAGE1_SAMPLES  1024
 static uint64_t stage1_deltas[MAX_STAGE1_SAMPLES];
@@ -75,10 +78,57 @@ static int setup_stage1_event(uint64_t raw_config, const char *event_name)
 
     int fd = perf_event_open_sys(&pe, 0, -1, -1, 0);
     if (fd == -1) {
+        stage1_open_errno = errno;
         fprintf(stderr, "Error opening %s (0x%llx): %s\n",
                 event_name, (unsigned long long)raw_config, strerror(errno));
     }
     return fd;
+}
+
+static void stage1_read_before(int fd, uint64_t *value)
+{
+    stage1_before_valid =
+        (fd >= 0 && read(fd, value, sizeof(*value)) == sizeof(*value));
+}
+
+static void stage1_read_after(int fd, uint64_t before)
+{
+    uint64_t value = 0;
+    if (!stage1_before_valid || fd < 0 ||
+        read(fd, &value, sizeof(value)) != sizeof(value)) {
+        stage1_before_valid = 0;
+        return;
+    }
+    stage1_before_valid = 0;
+    if (stage1_count < MAX_STAGE1_SAMPLES) {
+        stage1_deltas[stage1_count++] = value - before;
+    }
+}
+
+/* Probe the exact event descriptor used by the production helper. */
+int pmu_stage1_preflight(uint64_t *value, int *error_number)
+{
+    uint64_t first = 0;
+    uint64_t second = 0;
+
+    if (error_number != NULL) *error_number = 0;
+    if (value == NULL) {
+        if (error_number != NULL) *error_number = EINVAL;
+        return -1;
+    }
+    if (fd_stage1_selected < 0) {
+        if (error_number != NULL) {
+            *error_number = stage1_open_errno ? stage1_open_errno : ENODEV;
+        }
+        return -1;
+    }
+    if (read(fd_stage1_selected, &first, sizeof(first)) != sizeof(first) ||
+        read(fd_stage1_selected, &second, sizeof(second)) != sizeof(second)) {
+        if (error_number != NULL) *error_number = errno ? errno : EIO;
+        return -1;
+    }
+    *value = second;
+    return 0;
 }
 
 /* Stage1 查询接口 */
@@ -95,17 +145,12 @@ uint64_t pmu_stage1_get_delta(int i)
 /* Stage1: 被汇编在 STAGE1_BEGIN/END 调用 */
 void pmu_stage1_before(void)
 {
-    (void)read(fd_stage1, &stage1_before, sizeof(stage1_before));
+    stage1_read_before(fd_stage1, &stage1_before);
 }
 
 void pmu_stage1_after(void)
 {
-    uint64_t val = 0;
-    read(fd_stage1, &val, sizeof(val));
-    uint64_t delta = val - stage1_before;
-    if (stage1_count < MAX_STAGE1_SAMPLES) {
-        stage1_deltas[stage1_count++] = delta;
-    }
+    stage1_read_after(fd_stage1, stage1_before);
 }
 
 /*
@@ -117,17 +162,12 @@ void pmu_stage1_after(void)
  */
 void pmu_stage1_indirect_before(void)
 {
-    (void)read(fd_stage1_indirect, &stage1_indirect_before,
-               sizeof(stage1_indirect_before));
+    stage1_read_before(fd_stage1_indirect, &stage1_indirect_before);
 }
 
 void pmu_stage1_indirect_after(void)
 {
-    uint64_t val = 0;
-    read(fd_stage1_indirect, &val, sizeof(val));
-    if (stage1_count < MAX_STAGE1_SAMPLES) {
-        stage1_deltas[stage1_count++] = val - stage1_indirect_before;
-    }
+    stage1_read_after(fd_stage1_indirect, stage1_indirect_before);
 }
 
 /*
@@ -139,17 +179,14 @@ void pmu_stage1_indirect_after(void)
  */
 void pmu_stage1_disambiguation_before(void)
 {
-    (void)read(fd_stage1_disambiguation, &stage1_disambiguation_before,
-               sizeof(stage1_disambiguation_before));
+    stage1_read_before(
+        fd_stage1_disambiguation, &stage1_disambiguation_before);
 }
 
 void pmu_stage1_disambiguation_after(void)
 {
-    uint64_t val = 0;
-    read(fd_stage1_disambiguation, &val, sizeof(val));
-    if (stage1_count < MAX_STAGE1_SAMPLES) {
-        stage1_deltas[stage1_count++] = val - stage1_disambiguation_before;
-    }
+    stage1_read_after(
+        fd_stage1_disambiguation, stage1_disambiguation_before);
 }
 
 /*
@@ -162,17 +199,12 @@ void pmu_stage1_disambiguation_after(void)
  */
 void pmu_stage1_return_before(void)
 {
-    (void)read(fd_stage1_return, &stage1_return_before,
-               sizeof(stage1_return_before));
+    stage1_read_before(fd_stage1_return, &stage1_return_before);
 }
 
 void pmu_stage1_return_after(void)
 {
-    uint64_t val = 0;
-    read(fd_stage1_return, &val, sizeof(val));
-    if (stage1_count < MAX_STAGE1_SAMPLES) {
-        stage1_deltas[stage1_count++] = val - stage1_return_before;
-    }
+    stage1_read_after(fd_stage1_return, stage1_return_before);
 }
 
 /* =============================================================
@@ -232,16 +264,20 @@ static void pmu_init(void)
     if (&pmu_stage1_event_return_selected != NULL) {
         fd_stage1_return = setup_stage1_event(
             RAW_BR_MISP_RETIRED_RETURN, "BR_MISP_RETIRED.RETURN");
+        fd_stage1_selected = fd_stage1_return;
     } else if (&pmu_stage1_event_disambiguation_selected != NULL) {
         fd_stage1_disambiguation = setup_stage1_event(
             RAW_MACHINE_CLEARS_DISAMBIGUATION,
             "MACHINE_CLEARS.DISAMBIGUATION");
+        fd_stage1_selected = fd_stage1_disambiguation;
     } else if (&pmu_stage1_event_indirect_selected != NULL) {
         fd_stage1_indirect = setup_stage1_event(
             RAW_BR_MISP_INDIRECT, "BR_MISP_EXEC.INDIRECT");
+        fd_stage1_selected = fd_stage1_indirect;
     } else {
         fd_stage1 = setup_stage1_event(
             RAW_BR_MISP_COND, "BR_MISP_RETIRED.CONDITIONAL");
+        fd_stage1_selected = fd_stage1;
     }
     fd_l1d_miss = setup_l1d_miss_event();
 }

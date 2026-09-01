@@ -27,6 +27,7 @@ from stage1_evaluator import stage1_evaluate, detect_period, \
     parse_brmisp_deltas, parse_uops_transient, parse_uops_pmu_status, \
     DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
 from uops_pmu_preflight import run_uops_pmu_preflight
+from stage1_pmu_preflight import run_stage1_pmu_preflight
 
 logger = logging.getLogger("stage1")
 
@@ -74,6 +75,7 @@ class Stage1Controller(object):
             "eval_exception": 0,      # 评估流程异常
             "no_op_mutation": 0,
             "uops_pmu_unavailable": 0,
+            "stage1_pmu_unavailable": 0,
         }
 
         # 加载分析器输出
@@ -172,6 +174,42 @@ class Stage1Controller(object):
         - Baseline 评测失败视为硬错误，直接终止
         - Baseline 无条件加入种子库作为初始种子
         """
+
+        logger.info("=" * 60)
+        logger.info("Stage 1: selected raw PMU event preflight")
+        logger.info("=" * 60)
+
+        stage1_preflight = run_stage1_pmu_preflight(
+            self.cc, self.pmu_helper_obj, self.stage1_pmu_event,
+            self.work_dir, compile_timeout=self.compile_timeout,
+            run_timeout=min(self.run_timeout, 10))
+        stage1_preflight_report = os.path.join(
+            self.work_dir, "stage1_pmu_preflight.json")
+        try:
+            with open(stage1_preflight_report, "w") as report_file:
+                json.dump(stage1_preflight, report_file, indent=2,
+                          sort_keys=True)
+        except (OSError, TypeError) as exc:
+            self.framework_error = (
+                "cannot persist Stage 1 PMU preflight report: {}".format(exc))
+            logger.error(self.framework_error)
+            return []
+        if not stage1_preflight["ok"]:
+            self.failure_stats["stage1_pmu_unavailable"] += 1
+            self.framework_error = stage1_preflight["reason"]
+            logger.error("Stage 1 PMU preflight FAILED: {}".format(
+                stage1_preflight["reason"]))
+            logger.error(
+                "Stage 1 stopped before target preprocessing; verify event "
+                "support, perf_event permissions and PMU availability.")
+            return []
+        logger.info(
+            "Stage 1 PMU preflight PASSED: event={}, raw={}, value={} "
+            "(zero is a valid successful read)".format(
+                stage1_preflight["event"], stage1_preflight["raw_event"],
+                stage1_preflight["value"]))
+        logger.info("Stage 1 PMU preflight report: {}".format(
+            stage1_preflight_report))
 
         logger.info("=" * 60)
         logger.info("Stage 1: UOPS PMU preflight")
@@ -1006,7 +1044,8 @@ class Stage1Controller(object):
         if total_failures > 0:
             logger.info(
                 "  Failures: process={}, sanity={}, compile={} (timeout={}), "
-                "run={} (timeout={}), eval_exc={}, no_op={}"
+                "run={} (timeout={}), eval_exc={}, no_op={}, "
+                "stage1_pmu_unavailable={}, uops_pmu_unavailable={}"
                 .format(
                     self.failure_stats["process_failed"],
                     self.failure_stats["sanity_failed"],
@@ -1015,7 +1054,9 @@ class Stage1Controller(object):
                     self.failure_stats["run_failed"],
                     self.failure_stats["run_timeout"],
                     self.failure_stats["eval_exception"],
-                    self.failure_stats["no_op_mutation"]))
+                    self.failure_stats["no_op_mutation"],
+                    self.failure_stats["stage1_pmu_unavailable"],
+                    self.failure_stats["uops_pmu_unavailable"]))
 
         best = self.seed_pool.get_best_seed()
         if best and best.eval_detail:
@@ -1047,6 +1088,10 @@ class Stage1Controller(object):
         logger.info("  run_timeout:      {}".format(self.failure_stats["run_timeout"]))
         logger.info("  eval_exception:   {}".format(self.failure_stats["eval_exception"]))
         logger.info("  no_op_mutation:   {}".format(self.failure_stats["no_op_mutation"]))
+        logger.info("  stage1_pmu_unavailable: {}".format(
+            self.failure_stats["stage1_pmu_unavailable"]))
+        logger.info("  uops_pmu_unavailable:   {}".format(
+            self.failure_stats["uops_pmu_unavailable"]))
         
         total_attempts = total_failures + self.seed_pool.total_added
         if total_attempts > 0:

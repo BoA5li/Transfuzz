@@ -107,11 +107,14 @@ class UopsPmuPreflightTests(unittest.TestCase):
             stage1_controller.Stage1Controller)
         controller.cc = "cc"
         controller.pmu_uops_obj = "pmu.o"
+        controller.pmu_helper_obj = "stage1-pmu.o"
+        controller.stage1_pmu_event = "conditional"
         controller.work_dir = "/unused"
         controller.compile_timeout = 20
         controller.run_timeout = 20
         controller.framework_error = None
-        controller.failure_stats = {"uops_pmu_unavailable": 0}
+        controller.failure_stats = {
+            "uops_pmu_unavailable": 0, "stage1_pmu_unavailable": 0}
 
         failure = {
             "ok": False,
@@ -123,6 +126,12 @@ class UopsPmuPreflightTests(unittest.TestCase):
             "retired": None,
         }
         with mock.patch.object(
+                stage1_controller, "run_stage1_pmu_preflight",
+                return_value={
+                    "ok": True, "reason": "ok", "event":
+                    "BR_MISP_RETIRED.CONDITIONAL", "raw_event": "0x01c5",
+                    "value": 0}), \
+                mock.patch.object(
                 stage1_controller, "run_uops_pmu_preflight",
                 return_value=failure), \
                 mock.patch.object(controller, "_preprocess") as preprocess, \
