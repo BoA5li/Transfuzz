@@ -57,10 +57,12 @@ def process_asm(lines,
                 end_label="STAGE1_END",
                 nop_region_begin="# NOP_REGION_BEGIN",
                 nop_region_end="# NOP_REGION_END",
-                stage1_pmu_event="conditional"):
+                stage1_pmu_event="conditional",
+                stage1_begin_lfence=False):
     """
     第一轮用的汇编处理：
     1) 在 begin_label/end_label 处插入 PMU 调用
+       可选地在 begin PMU 调用后紧接 lfence，构造零训练轮对照基线
     2) 对 NOP_REGION 区域压缩为 nop
     3) 去掉 #APP / #NO_APP / 行号注释
     """
@@ -103,6 +105,8 @@ def process_asm(lines,
         if stripped == "{0}:".format(begin_label):
             out.append(line)
             out.append("\tcall {}\n".format(before_symbol))
+            if stage1_begin_lfence:
+                out.append("\tlfence\n")
             continue
 
         if stripped == "{0}:".format(end_label):

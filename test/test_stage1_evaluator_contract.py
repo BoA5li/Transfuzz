@@ -102,17 +102,76 @@ class Stage1EvaluatorContractTests(unittest.TestCase):
         self.assertEqual(uops["train_count"], 3)
         self.assertEqual(uops["detect_count"], 2)
 
-    def test_zero_training_rounds_are_represented_but_not_invented(self):
+    def test_zero_training_rounds_require_lfence_baseline(self):
         phases = ["DETECT", "DETECT"]
         brmisp = evaluator.brmisp_pattern_score([1, 1], phases)
         uops = evaluator.uops_transient_score([8, 9], phases)
 
         self.assertEqual(brmisp["train_count"], 0)
-        self.assertEqual(brmisp["detail"], "empty_group")
+        self.assertEqual(brmisp["detail"], "baseline_required")
         self.assertFalse(brmisp["passed"])
         self.assertEqual(uops["train_count"], 0)
-        self.assertEqual(uops["detail"], "empty_group")
+        self.assertEqual(uops["detail"], "baseline_required")
         self.assertFalse(uops["passed"])
+
+    def test_zero_training_rounds_use_lfence_reference(self):
+        brmisp = evaluator.brmisp_pattern_score(
+            [1, 1], ["DETECT", "DETECT"], reference_baseline=[0, 0])
+        uops = evaluator.uops_transient_score(
+            [8, 9], ["DETECT", "DETECT"], reference_baseline=[0, 0])
+
+        self.assertEqual(brmisp["baseline_source"], "LFENCE_REFERENCE")
+        self.assertEqual(brmisp["baseline_count"], 2)
+        self.assertTrue(brmisp["passed"])
+        self.assertEqual(uops["baseline_source"], "LFENCE_REFERENCE")
+        self.assertEqual(uops["baseline_count"], 2)
+        self.assertTrue(uops["passed"])
+
+    def test_stage1_evaluate_uses_lfence_log_for_zero_training(self):
+        detect_log = [
+            "STAGE1_PHASE[0]=DETECT",
+            "STAGE1_PHASE[1]=DETECT",
+            "STAGE1_DELTA_BR_MISP_COND[0]=1",
+            "STAGE1_DELTA_BR_MISP_COND[1]=1",
+            "UOPS_TRANSIENT[0]=8",
+            "UOPS_TRANSIENT[1]=9",
+        ]
+        reference_log = [
+            "STAGE1_PHASE[0]=DETECT",
+            "STAGE1_PHASE[1]=DETECT",
+            "STAGE1_DELTA_BR_MISP_COND[0]=0",
+            "STAGE1_DELTA_BR_MISP_COND[1]=0",
+            "UOPS_TRANSIENT[0]=0",
+            "UOPS_TRANSIENT[1]=0",
+        ]
+        result = evaluator.stage1_evaluate(
+            detect_log, lfence_baseline_log_lines=reference_log)
+
+        self.assertEqual(result["phase_contract"], "ok")
+        self.assertEqual(result["baseline_source"], "LFENCE_REFERENCE")
+        self.assertEqual(result["baseline_count"], 2)
+        self.assertTrue(result["passed"])
+
+    def test_lfence_reference_sample_count_must_match(self):
+        detect_log = [
+            "STAGE1_PHASE[0]=DETECT",
+            "STAGE1_PHASE[1]=DETECT",
+            "STAGE1_DELTA_BR_MISP_COND[0]=1",
+            "STAGE1_DELTA_BR_MISP_COND[1]=1",
+            "UOPS_TRANSIENT[0]=8",
+            "UOPS_TRANSIENT[1]=9",
+        ]
+        reference_log = [
+            "STAGE1_PHASE[0]=DETECT",
+            "STAGE1_DELTA_BR_MISP_COND[0]=0",
+            "UOPS_TRANSIENT[0]=0",
+        ]
+        result = evaluator.stage1_evaluate(
+            detect_log, lfence_baseline_log_lines=reference_log)
+        self.assertEqual(
+            result["phase_contract"],
+            "lfence_baseline_sample_count_mismatch")
+        self.assertFalse(result["passed"])
 
 
 if __name__ == "__main__":

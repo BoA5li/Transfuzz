@@ -132,10 +132,13 @@ def main():
             seed.current_stage_mutated_pcs))
         print("    Mutations: {}".format(len(seed.mutation_history)))
         if seed.eval_detail:
-            print("    Runtime phases: train={}, detect={}, contract={}".format(
+            print("    Runtime phases: train={}, detect={}, contract={}, "
+                  "baseline_source={}, baseline_count={}".format(
                 seed.eval_detail.get("train_count", 0),
                 seed.eval_detail.get("detect_count", 0),
-                seed.eval_detail.get("phase_contract", "unknown")))
+                seed.eval_detail.get("phase_contract", "unknown"),
+                seed.eval_detail.get("baseline_source", "unknown"),
+                seed.eval_detail.get("baseline_count", 0)))
             br = seed.eval_detail.get("brmisp", {})
             uops = seed.eval_detail.get("uops", {})
             print("    BR_MISP: elevation_rate={:.3f}, "

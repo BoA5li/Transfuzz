@@ -167,7 +167,7 @@ def _compute_baseline_range(train_data, tolerance_factor=1.5):
     return baseline_value, baseline_low, baseline_high, clean, noise_count
 
 
-def brmisp_pattern_score(deltas, phases):
+def brmisp_pattern_score(deltas, phases, reference_baseline=None):
     """
     BR_MISP 模式匹配评分（优化版）。
 
@@ -191,6 +191,8 @@ def brmisp_pattern_score(deltas, phases):
     result = {
         "score": 0.0, "passed": False, "detail": "ok",
         "phase_source": "runtime_labels",
+        "baseline_source": "TRAIN_REFERENCE",
+        "baseline_count": 0,
         "train_count": 0, "detect_count": 0,
         "train_mode": None, "train_stability": 0.0,
         "baseline_value": None, "baseline_mean": None,
@@ -214,16 +216,26 @@ def brmisp_pattern_score(deltas, phases):
     result["train_count"] = len(train)
     result["detect_count"] = len(attack)
 
-    if not train or not attack:
+    if not attack:
         result["detail"] = "empty_group"
         return result
+
+    if train:
+        baseline_data = train
+    elif reference_baseline:
+        baseline_data = list(reference_baseline)
+        result["baseline_source"] = "LFENCE_REFERENCE"
+    else:
+        result["detail"] = "baseline_required"
+        return result
+    result["baseline_count"] = len(baseline_data)
 
     # ============================================================
     # Step 2: Train baseline 去噪
     # ============================================================
     # 取众数作为参考点，用 MAD 确定正常范围
     baseline_value, bl_low, bl_high, clean_train, noise_count = \
-        _compute_baseline_range(train, tolerance_factor=1.5)
+        _compute_baseline_range(baseline_data, tolerance_factor=1.5)
 
     # baseline_mean: 去噪后训练数据的平均值
     if clean_train:
@@ -231,10 +243,11 @@ def brmisp_pattern_score(deltas, phases):
     else:
         baseline_mean = float(baseline_value)
 
-    train_mode, train_mode_count = _counter_most_common(train)
+    train_mode, train_mode_count = _counter_most_common(baseline_data)
 
     # stability: 去噪后数据占总训练数据的比例
-    train_stability = len(clean_train) / float(len(train)) if clean_train else 0.0
+    train_stability = (len(clean_train) / float(len(baseline_data))
+                       if clean_train else 0.0)
 
     # ============================================================
     # Step 3: 逐轮抬升检测
@@ -294,6 +307,7 @@ def brmisp_pattern_score(deltas, phases):
         "passed": passed,
         "train_mode": train_mode,
         "train_stability": train_stability,
+        "baseline_stability": train_stability,
         "baseline_value": baseline_value,
         "baseline_mean": baseline_mean,
         "baseline_range": (bl_low, bl_high),
@@ -343,7 +357,7 @@ def _estimate_uops_saturation(train_transients):
     return min(saturation, 500)
 
 
-def uops_transient_score(transients, phases):
+def uops_transient_score(transients, phases, reference_baseline=None):
     """
     UOPS 瞬态窗口评分（优化版）。
 
@@ -354,6 +368,8 @@ def uops_transient_score(transients, phases):
     result = {
         "score": 0.0, "passed": False, "detail": "ok",
         "phase_source": "runtime_labels",
+        "baseline_source": "TRAIN_REFERENCE",
+        "baseline_count": 0,
         "train_count": 0, "detect_count": 0,
         "speculative_uops": 0, "train_median": 0, "attack_median": 0,
         "stability": 0.0, "saturation_threshold": 100,
@@ -370,14 +386,25 @@ def uops_transient_score(transients, phases):
     result["train_count"] = len(train_t)
     result["detect_count"] = len(attack_t)
 
-    if not train_t or not attack_t:
+    if not attack_t:
         result["detail"] = "empty_group"
         return result
 
-    train_clean = _remove_outliers_mad(train_t, factor=4)
+
+    if train_t:
+        baseline_t = train_t
+    elif reference_baseline:
+        baseline_t = list(reference_baseline)
+        result["baseline_source"] = "LFENCE_REFERENCE"
+    else:
+        result["detail"] = "baseline_required"
+        return result
+    result["baseline_count"] = len(baseline_t)
+
+    train_clean = _remove_outliers_mad(baseline_t, factor=4)
     attack_clean = _remove_outliers_mad(attack_t, factor=4)
     if not train_clean:
-        train_clean = train_t
+        train_clean = baseline_t
     if not attack_clean:
         attack_clean = attack_t
 
@@ -434,11 +461,15 @@ DEFAULT_UOPS_WEIGHT = 0.2
 
 def stage1_evaluate(log_lines,
                     brmisp_weight=DEFAULT_BRMISP_WEIGHT,
-                    uops_weight=DEFAULT_UOPS_WEIGHT):
+                    uops_weight=DEFAULT_UOPS_WEIGHT,
+                    lfence_baseline_log_lines=None):
     """
     Stage 1 综合评分。
 
     TRAIN/DETECT membership comes exclusively from explicit runtime labels.
+    Normal runs use TRAIN samples as their reference.  A zero-training run
+    must provide measurements from the same program with an LFENCE immediately
+    after the begin-PMU call; those measurements become its control reference.
     No manual period or PMU-signal heuristic is used.
     """
     brmisp_deltas = parse_brmisp_deltas(log_lines)
@@ -462,10 +493,40 @@ def stage1_evaluate(log_lines,
     if total_w <= 0:
         raise ValueError("At least one Stage 1 score weight must be positive")
 
+    reference_brmisp = None
+    reference_uops = None
+    baseline_source = "TRAIN_REFERENCE"
+    if phase_detail == "ok" and phases.count("TRAIN") == 0:
+        baseline_source = "LFENCE_REFERENCE"
+        if lfence_baseline_log_lines is None:
+            phase_detail = "lfence_baseline_missing"
+        else:
+            reference_brmisp = parse_brmisp_deltas(
+                lfence_baseline_log_lines)
+            reference_uops = parse_uops_transient(
+                lfence_baseline_log_lines)
+            reference_phases = parse_stage1_phases(
+                lfence_baseline_log_lines)
+            if not reference_phases:
+                phase_detail = "lfence_phase_contract_missing"
+            elif any(phase not in valid_phases
+                     for phase in reference_phases):
+                phase_detail = "lfence_phase_contract_invalid"
+            elif len(reference_phases) != len(reference_brmisp):
+                phase_detail = "lfence_brmisp_phase_count_mismatch"
+            elif len(reference_phases) != len(reference_uops):
+                phase_detail = "lfence_uops_phase_count_mismatch"
+            elif reference_phases.count("TRAIN") != 0:
+                phase_detail = "lfence_baseline_not_zero_training"
+            elif len(reference_phases) != phases.count("DETECT"):
+                phase_detail = "lfence_baseline_sample_count_mismatch"
+
     # 评分
     scoring_phases = phases if phase_detail == "ok" else []
-    br_eval = brmisp_pattern_score(brmisp_deltas, scoring_phases)
-    uops_eval = uops_transient_score(uops_transients, scoring_phases)
+    br_eval = brmisp_pattern_score(
+        brmisp_deltas, scoring_phases, reference_brmisp)
+    uops_eval = uops_transient_score(
+        uops_transients, scoring_phases, reference_uops)
 
     # 无效指标不贡献分数，但仍保留其权重，避免缺失指标导致剩余指标
     # 被重新归一化并获得不合理的满权重。
@@ -485,6 +546,8 @@ def stage1_evaluate(log_lines,
         "passed": combined_passed,
         "phase_contract": phase_detail,
         "phase_source": "runtime_labels",
+        "baseline_source": baseline_source,
+        "baseline_count": br_eval.get("baseline_count", 0),
         "train_count": phases.count("TRAIN"),
         "detect_count": phases.count("DETECT"),
         "brmisp": br_eval,

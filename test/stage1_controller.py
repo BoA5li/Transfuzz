@@ -23,7 +23,8 @@ import time
 
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
-from stage1_evaluator import stage1_evaluate, parse_uops_pmu_status, \
+from stage1_evaluator import stage1_evaluate, parse_stage1_phases, \
+    parse_uops_pmu_status, \
     DEFAULT_BRMISP_WEIGHT, DEFAULT_UOPS_WEIGHT
 from uops_pmu_preflight import run_uops_pmu_preflight
 from stage1_pmu_preflight import run_stage1_pmu_preflight
@@ -275,10 +276,13 @@ class Stage1Controller(object):
         uops = baseline_eval["uops"]
         logger.info("Baseline score: {:.4f}".format(baseline_eval["score"]))
         logger.info(
-            "  Runtime phases: train={}, detect={}, contract={}".format(
+            "  Runtime phases: train={}, detect={}, contract={}, "
+            "baseline_source={}, baseline_count={}".format(
                 baseline_eval.get("train_count", 0),
                 baseline_eval.get("detect_count", 0),
-                baseline_eval.get("phase_contract", "unknown")))
+                baseline_eval.get("phase_contract", "unknown"),
+                baseline_eval.get("baseline_source", "unknown"),
+                baseline_eval.get("baseline_count", 0)))
         logger.info("  BR_MISP: passed={}, score={:.4f}, "
                     "baseline_mean={}, baseline_range={}, "
                     "stability={:.3f}, elevation_rate={:.3f}, "
@@ -672,9 +676,6 @@ class Stage1Controller(object):
             logger.debug("[{}] ❤️ Step 4-5: compute score start (limit={}s)".format(
                 tag, SCORE_TIMEOUT))
 
-            signal.signal(signal.SIGALRM, _score_timeout_handler)
-            signal.alarm(SCORE_TIMEOUT)
-
             try:
                 uops_status, uops_status_detail = parse_uops_pmu_status(
                     log_lines)
@@ -687,10 +688,23 @@ class Stage1Controller(object):
                         "[{}] UOPS PMU runtime health check failed: {}"
                         .format(tag, uops_status_detail))
                     return None
+                lfence_baseline_log_lines = None
+                phases = parse_stage1_phases(log_lines)
+                if phases and phases.count("TRAIN") == 0:
+                    lfence_baseline_log_lines = \
+                        self._collect_lfence_baseline(seed, tag)
+                    if lfence_baseline_log_lines is None:
+                        if self.framework_error is None:
+                            self.framework_error = (
+                                "Stage 1 LFENCE baseline collection failed")
+                        return None
+                signal.signal(signal.SIGALRM, _score_timeout_handler)
+                signal.alarm(SCORE_TIMEOUT)
                 result = stage1_evaluate(
                     log_lines,
                     brmisp_weight=self.brmisp_weight,
                     uops_weight=self.uops_weight,
+                    lfence_baseline_log_lines=lfence_baseline_log_lines,
                 )
                 if result.get("phase_contract") != "ok":
                     self.failure_stats["phase_contract_invalid"] += 1
@@ -731,7 +745,46 @@ class Stage1Controller(object):
             except Exception:
                 pass
 
-    def _process_asm(self, asm_path, tag):
+    def _collect_lfence_baseline(self, seed, tag):
+        """Compile and run the serialized control used by zero-training tests."""
+        reference_tag = "{}_lfence_baseline".format(tag)
+        processed_path = self._process_asm(
+            seed.asm_path, reference_tag, stage1_begin_lfence=True)
+        if processed_path is None:
+            self.failure_stats["process_failed"] += 1
+            return None
+
+        try:
+            from asm_sanity_check import sanity_check_file
+            ok, reason = sanity_check_file(processed_path, strict=False)
+            if not ok:
+                self.failure_stats["sanity_failed"] += 1
+                logger.error("[{}] LFENCE baseline sanity check failed: {}"
+                             .format(tag, reason))
+                return None
+        except ImportError:
+            logger.warning("asm_sanity_check module not found, skipping check")
+
+        exe_path = self._compile(processed_path, reference_tag)
+        if exe_path is None:
+            return None
+        log_lines = self._run_executable(exe_path, reference_tag)
+        if log_lines is None:
+            return None
+
+        status, detail = parse_uops_pmu_status(log_lines)
+        if status != "ok":
+            self.failure_stats["uops_pmu_unavailable"] += 1
+            self.framework_error = (
+                "UOPS PMU LFENCE baseline health check failed: {}".format(
+                    detail))
+            return None
+        logger.info(
+            "[{}] Collected LFENCE_REFERENCE for zero-training scoring"
+            .format(tag))
+        return log_lines
+
+    def _process_asm(self, asm_path, tag, stage1_begin_lfence=False):
         """对 .s 做插桩"""
         script_dir = os.path.dirname(os.path.abspath(__file__))
         if script_dir not in sys.path:
@@ -747,7 +800,8 @@ class Stage1Controller(object):
 
         try:
             processed_lines = process_asm(
-                lines, stage1_pmu_event=self.stage1_pmu_event)
+                lines, stage1_pmu_event=self.stage1_pmu_event,
+                stage1_begin_lfence=stage1_begin_lfence)
         except ValueError as exc:
             self.framework_error = str(exc)
             logger.error("[{}] {}".format(tag, exc))

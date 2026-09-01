@@ -61,6 +61,18 @@ class Stage1PmuEventSelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             process_asm(SOURCE, stage1_pmu_event="unknown-event")
 
+    def test_lfence_baseline_places_fence_first_in_measured_window(self):
+        output = process_asm(
+            SOURCE, stage1_pmu_event="conditional",
+            stage1_begin_lfence=True)
+        begin = output.index("STAGE1_BEGIN:\n")
+        self.assertEqual(output[begin + 1], "\tcall pmu_stage1_before\n")
+        self.assertEqual(output[begin + 2], "\tlfence\n")
+
+    def test_normal_instrumentation_does_not_add_lfence(self):
+        output = "".join(process_asm(SOURCE))
+        self.assertNotIn("lfence", output)
+
 
 if __name__ == "__main__":
     unittest.main()
