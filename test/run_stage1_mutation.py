@@ -58,8 +58,6 @@ def main():
                     help="UOPS score weight (default: 0.2)")
     ap.add_argument("--run-timeout", type=int, default=60,
                     help="Execution timeout seconds (default: 60)")
-    ap.add_argument("--early-stop", type=int, default=10,
-                    help="Stop after N passed seeds (default: 10)")
     ap.add_argument("--report-interval", type=int, default=50,
                     help="Report stats every N rounds (default: 50)")
     ap.add_argument("--log-level", default="INFO",
@@ -108,7 +106,6 @@ def main():
         "brmisp_weight": args.brmisp_weight,
         "uops_weight": args.uops_weight,
         "run_timeout": args.run_timeout,
-        "early_stop_passed": args.early_stop,
         "report_interval": args.report_interval,
     }
 
