@@ -34,51 +34,68 @@ def parse_stage2_pmu_status(log_lines):
             return "error", line.strip()
     return "missing", "STAGE2_PMU_STATUS marker missing"
 
-def parse_stage2_rounds(log_lines, max_rounds=100):
-    """
-    从日志行解析所有 STAGE2_ROUND{i}_... 数据。
+_ROUND_FIELD_RE = re.compile(
+    r"STAGE2_ROUND(\d+)_(SECRET|TARGET_VALUE|TARGET_HITS|TARGET_TOTAL|"
+    r"CONTROL_VALUE|CONTROL_HITS|CONTROL_TOTAL)\s*=\s*(-?\d+)")
+_REQUIRED_COUNTER_FIELDS = (
+    "target_hits", "target_total", "control_hits", "control_total")
 
-    返回:
-      list of dict, 每个 dict 包含一轮的数据:
-        {
-          "round": int,
-          "secret": int,
-          "target_value": int,
-          "target_hits": int,
-          "target_total": int,
-          "control_value": int,
-          "control_hits": int,
-          "control_total": int,
-        }
+
+def parse_stage2_rounds_checked(log_lines, max_rounds=100):
     """
+    Parse and validate all Stage 2 rounds.
+
+    Returns ``(rounds, validation_error)``.  A present round is accepted only
+    when both target/control hit and total fields are present, totals are
+    positive, and each hit count is in ``[0, total]``.  Round numbering must be
+    contiguous from ROUND0 so a truncated middle round cannot be overlooked.
+    """
+    by_round = {}
+    for line in log_lines:
+        for match in _ROUND_FIELD_RE.finditer(line):
+            round_idx = int(match.group(1))
+            if round_idx >= max_rounds:
+                return [], "round_{}_exceeds_max_rounds_{}".format(
+                    round_idx, max_rounds)
+            field = match.group(2).lower()
+            by_round.setdefault(round_idx, {})[field] = int(match.group(3))
+
+    if not by_round:
+        return [], None
+
+    round_indices = sorted(by_round)
+    expected_indices = list(range(round_indices[-1] + 1))
+    if round_indices != expected_indices:
+        return [], "non_contiguous_round_indices: {}".format(round_indices)
+
     rounds = []
+    for round_idx in round_indices:
+        data = by_round[round_idx]
+        missing = [
+            field for field in _REQUIRED_COUNTER_FIELDS if field not in data]
+        if missing:
+            return [], "round_{}_missing_fields: {}".format(
+                round_idx, ",".join(missing))
 
-    for round_idx in range(max_rounds):
-        prefix = "STAGE2_ROUND{}".format(round_idx)
-
-        data = {}
-        patterns = {
-            "secret":        re.compile(prefix + r"_SECRET\s*=\s*(\d+)"),
-            "target_value":  re.compile(prefix + r"_TARGET_VALUE\s*=\s*(\d+)"),
-            "target_hits":   re.compile(prefix + r"_TARGET_HITS\s*=\s*(\d+)"),
-            "target_total":  re.compile(prefix + r"_TARGET_TOTAL\s*=\s*(\d+)"),
-            "control_value": re.compile(prefix + r"_CONTROL_VALUE\s*=\s*(\d+)"),
-            "control_hits":  re.compile(prefix + r"_CONTROL_HITS\s*=\s*(\d+)"),
-            "control_total": re.compile(prefix + r"_CONTROL_TOTAL\s*=\s*(\d+)"),
-        }
-
-        for line in log_lines:
-            for key, pat in patterns.items():
-                m = pat.search(line)
-                if m:
-                    data[key] = int(m.group(1))
-
-        # 至少需要 target_total 才算有效轮
-        if "target_total" not in data:
-            break
+        for group in ("target", "control"):
+            hits = data["{}_hits".format(group)]
+            total = data["{}_total".format(group)]
+            if total <= 0:
+                return [], "round_{}_{}_total_must_be_positive: {}".format(
+                    round_idx, group, total)
+            if hits < 0 or hits > total:
+                return [], "round_{}_{}_hits_out_of_range: {}/{}".format(
+                    round_idx, group, hits, total)
 
         data["round"] = round_idx
         rounds.append(data)
+
+    return rounds, None
+
+
+def parse_stage2_rounds(log_lines, max_rounds=100):
+    """Backward-compatible parser; invalid input returns no usable rounds."""
+    rounds, _ = parse_stage2_rounds_checked(log_lines, max_rounds=max_rounds)
 
     return rounds
 
@@ -176,7 +193,7 @@ def stage2_evaluate(log_lines):
         可以重新加入。
     """
     pmu_status, pmu_status_detail = parse_stage2_pmu_status(log_lines)
-    rounds = parse_stage2_rounds(log_lines)
+    rounds, round_validation_error = parse_stage2_rounds_checked(log_lines)
 
     result = {
         "score": 0.0,
@@ -189,10 +206,15 @@ def stage2_evaluate(log_lines):
         "round_details": [],
         "pmu_status": pmu_status,
         "pmu_status_detail": pmu_status_detail,
+        "round_validation_error": round_validation_error,
     }
 
     if pmu_status != "ok":
         result["detail"] = "pmu_{}".format(pmu_status)
+        return result
+
+    if round_validation_error is not None:
+        result["detail"] = "invalid_stage2_data"
         return result
 
     if not rounds:
