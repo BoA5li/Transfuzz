@@ -74,6 +74,7 @@ class Stage2Controller(object):
             "eval_exception": 0,      # 评估流程异常
             "no_op_mutation": 0,      # 无效变异（NO-OP）
             "l1d_pmu_unavailable": 0,
+            "invalid_round_data": 0,  # 缺失或越界的 Stage 2 计数
         }
 
         self.pmu_preflight_results = config.get("pmu_preflight_results")
@@ -600,8 +601,15 @@ class Stage2Controller(object):
                 logger.error("[{}] {}".format(tag, self.framework_error))
                 return None
 
-            # 评估
-            return stage2_evaluate(log_lines)
+            # 评估。无效 ROUND 数据属于测量失败，不能作为零分种子入池。
+            eval_result = stage2_evaluate(log_lines)
+            if eval_result.get("detail") == "invalid_stage2_data":
+                self.failure_stats["invalid_round_data"] += 1
+                logger.error(
+                    "[{}] Invalid Stage 2 round data: {}".format(
+                        tag, eval_result.get("round_validation_error")))
+                return None
+            return eval_result
 
         except subprocess.TimeoutExpired:
             # 兜底：理论上不会到达这里
@@ -1077,7 +1085,8 @@ class Stage2Controller(object):
         if total_failures > 0:
             logger.info(
                 "  Failures: process={}, compile={} (timeout={}), "
-                "run={} (timeout={}), eval_exc={}, l1d_pmu_unavailable={}"
+                "run={} (timeout={}), eval_exc={}, l1d_pmu_unavailable={}, "
+                "invalid_round_data={}"
                 .format(
                     self.failure_stats["process_failed"],
                     self.failure_stats["compile_failed"],
@@ -1085,7 +1094,8 @@ class Stage2Controller(object):
                     self.failure_stats["run_failed"],
                     self.failure_stats["run_timeout"],
                     self.failure_stats["eval_exception"],
-                    self.failure_stats["l1d_pmu_unavailable"]))
+                    self.failure_stats["l1d_pmu_unavailable"],
+                    self.failure_stats["invalid_round_data"]))
 
         best = self.seed_pool.get_best_seed()
         if best and best.eval_detail:
@@ -1117,6 +1127,8 @@ class Stage2Controller(object):
         logger.info("  eval_exception:   {}".format(self.failure_stats["eval_exception"]))
         logger.info("  l1d_pmu_unavailable: {}".format(
             self.failure_stats["l1d_pmu_unavailable"]))
+        logger.info("  invalid_round_data: {}".format(
+            self.failure_stats["invalid_round_data"]))
         logger.info("  no_op_mutation:   {}".format(self.failure_stats["no_op_mutation"]))  
         
         # 计算失败率
