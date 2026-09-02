@@ -45,7 +45,6 @@ class Stage2Controller(object):
         self.pmu_uops_obj = _abs(config.get("pmu_uops_obj", "pmu_uops_rdpmc.o"))
         self.run_timeout = config.get("run_timeout", 120)
         self.report_interval = config.get("report_interval", 50)
-        self.trials_per_round = config.get("trials_per_round", 1000)
 
         # 预编译 stage3_driver_safe.o（只编译一次）
         self.stage3_obj = os.path.join(self.work_dir, "stage3_driver_safe.o")
@@ -279,7 +278,8 @@ class Stage2Controller(object):
                 return None
 
             # 评估
-            return stage2_evaluate(log_lines)
+            return stage2_evaluate(
+                log_lines, expected_secret=self.expected_secret)
 
         except subprocess.TimeoutExpired:
             logger.debug("[{}] Timeout".format(tag))
