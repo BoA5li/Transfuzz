@@ -40,5 +40,42 @@ class Stage2EvaluatorThresholdTests(unittest.TestCase):
         self.assertAlmostEqual(result["mean_signal"], 0.08)
 
 
+class Stage2RoundValidationTests(unittest.TestCase):
+
+    def _assert_invalid(self, log, expected_error):
+        result = stage2_evaluator.stage2_evaluate(log)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["score"], 0.0)
+        self.assertEqual(result["detail"], "invalid_stage2_data")
+        self.assertIn(expected_error, result["round_validation_error"])
+
+    def test_missing_required_counter_field_is_rejected(self):
+        log = _log(700, 200)
+        log = [line for line in log if "CONTROL_HITS" not in line]
+        self._assert_invalid(log, "missing_fields: control_hits")
+
+    def test_zero_total_is_rejected(self):
+        self._assert_invalid(_log(0, 0, total=0),
+                             "target_total_must_be_positive")
+
+    def test_hits_greater_than_total_is_rejected(self):
+        self._assert_invalid(_log(1001, 0),
+                             "target_hits_out_of_range")
+
+    def test_negative_hits_is_rejected(self):
+        self._assert_invalid(_log(-1, 0),
+                             "target_hits_out_of_range")
+
+    def test_non_contiguous_rounds_are_rejected(self):
+        log = _log(700, 200)
+        log.extend([
+            "STAGE2_ROUND2_TARGET_HITS=700",
+            "STAGE2_ROUND2_TARGET_TOTAL=1000",
+            "STAGE2_ROUND2_CONTROL_HITS=200",
+            "STAGE2_ROUND2_CONTROL_TOTAL=1000",
+        ])
+        self._assert_invalid(log, "non_contiguous_round_indices")
+
+
 if __name__ == "__main__":
     unittest.main()
