@@ -226,6 +226,15 @@ class Stage2Controller(object):
             )
 
             if eval_result is None:
+                # A framework error invalidates the measurement environment,
+                # not merely this seed.  Preserve the original diagnostic and
+                # stop before evaluating another baseline.
+                if self.framework_error is not None:
+                    logger.error(
+                        "Stage 2 aborted during baseline collection because "
+                        "measurement validity was lost: {}".format(
+                            self.framework_error))
+                    return []
                 # ✅ 与 Stage 1 不同：Stage 2 是多 baseline 场景，
                 #   单个 baseline 失败不应导致整个流程终止，仅跳过
                 logger.warning(
@@ -280,6 +289,12 @@ class Stage2Controller(object):
 
         for round_idx in range(self.budget):
             self._mutation_round(round_idx)
+
+            if self.framework_error is not None:
+                logger.error(
+                    "Stage 2 aborted during mutation because measurement "
+                    "validity was lost: {}".format(self.framework_error))
+                return []
 
             if (round_idx + 1) % self.report_interval == 0:
                 self._report_stats(round_idx + 1)
