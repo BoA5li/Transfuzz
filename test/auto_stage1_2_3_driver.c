@@ -138,6 +138,29 @@ static void maybe_run_stage3_after_stage2_round(int round_idx, uint8_t expected_
     print_stage3_round_result(round_idx, &r);
 }
 
+static inline void stage2_probe_wait(void)
+{
+    for (volatile int z = 0; z < 100; z++) {}
+}
+
+static int stage2_target_trial(volatile uint8_t *probe_target)
+{
+    flush_line(probe_target);
+    stage2_probe_wait();
+    vf_run_attack_once();
+    stage2_probe_wait();
+    return probe_line_via_l1d_miss(probe_target);
+}
+
+static int stage2_control_trial(volatile uint8_t *probe_target)
+{
+    flush_line(probe_target);
+    stage2_probe_wait();
+    /* Match the second fixed wait without invoking the victim. */
+    stage2_probe_wait();
+    return probe_line_via_l1d_miss(probe_target);
+}
+
 /**
  * 在 secret = s 的条件下，对 target_s 做多次试验
  */
@@ -154,31 +177,30 @@ static int stage2_round_dual(uint8_t secret,
     int hits_t = 0, total_t = 0;
     int hits_c = 0, total_c = 0;
 
+    /*
+     * Keep trials in one process to avoid startup/page-fault/PMU-open noise,
+     * but collect target and control as adjacent pairs.  Alternate pair order
+     * so slow temporal drift cannot systematically favor the first group.
+     * This is a steady-state repeated measurement, not a claim that predictor,
+     * TLB, or prefetcher state is independently reset between samples.
+     */
     for (int i = 0; i < trials; i++) {
-        flush_line(probe_target);
-
-        for (volatile int z = 0; z < 100; z++) {}
-
-        vf_run_attack_once();
-
-        for (volatile int z = 0; z < 100; z++) {}
-
-        int hit_t = probe_line_via_l1d_miss(probe_target);
-        if (hit_t < 0) return -1;
+        int hit_t;
+        int hit_c;
+        if ((i & 1) == 0) {
+            hit_t = stage2_target_trial(probe_target);
+            if (hit_t < 0) return -1;
+            hit_c = stage2_control_trial(probe_target);
+            if (hit_c < 0) return -1;
+        } else {
+            hit_c = stage2_control_trial(probe_target);
+            if (hit_c < 0) return -1;
+            hit_t = stage2_target_trial(probe_target);
+            if (hit_t < 0) return -1;
+        }
 
         total_t++;
         hits_t += hit_t;
-    }
-
-    for (int i = 0; i < trials; i++) {
-        flush_line(probe_target);
-        for (volatile int z = 0; z < 100; z++) {}   // 同样的等待
-
-        for (volatile int z = 0; z < 100; z++) {}   // 同样的等待
-
-        int hit_c = probe_line_via_l1d_miss(probe_target);
-        if (hit_c < 0) return -1;
-
         total_c++;
         hits_c += hit_c;
     }
@@ -208,6 +230,8 @@ int main(int argc, char **argv)
         return 2;
     }
     printf("STAGE2_PMU_STATUS=OK event=MEM_LOAD_RETIRED.L1_MISS\n");
+    printf("STAGE2_TRIAL_SCHEDULE=PAIRED_ALTERNATING trials_per_group=%d\n",
+           trials);
 
     // 直接复用 Stage2 刚刚设置过的 secret=s0
     maybe_run_stage3_after_stage2_round(0, s0);
