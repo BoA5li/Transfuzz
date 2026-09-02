@@ -81,6 +81,22 @@ class Stage2PmuPreflightTests(unittest.TestCase):
         self.assertEqual(healthy["pmu_status"], "ok")
         self.assertTrue(healthy["passed"])
 
+    def test_runtime_error_cannot_be_interpreted_as_zero_misses(self):
+        result = stage2_evaluator.stage2_evaluate([
+            "STAGE2_PMU_STATUS=ERROR detail=l1d_miss_read_failed",
+            "STAGE2_ROUND0_SECRET=89",
+            "STAGE2_ROUND0_TARGET_VALUE=89",
+            "STAGE2_ROUND0_TARGET_HITS=10",
+            "STAGE2_ROUND0_TARGET_TOTAL=10",
+            "STAGE2_ROUND0_CONTROL_VALUE=89",
+            "STAGE2_ROUND0_CONTROL_HITS=10",
+            "STAGE2_ROUND0_CONTROL_TOTAL=10",
+        ], expected_secret=89)
+
+        self.assertEqual(result["detail"], "pmu_error")
+        self.assertEqual(result["score"], 0.0)
+        self.assertFalse(result["passed"])
+
     def test_controller_stops_before_seed_processing_on_failure(self):
         controller = stage2_controller.Stage2Controller.__new__(
             stage2_controller.Stage2Controller)
