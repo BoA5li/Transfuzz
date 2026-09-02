@@ -14,7 +14,7 @@ import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from stage2_evaluator import parse_stage2_rounds, stage2_evaluate, \
+from stage2_evaluator import parse_stage2_rounds_checked, stage2_evaluate, \
     _compute_round_signal
 
 
@@ -36,7 +36,11 @@ def main():
         lines = f.readlines()
 
     # 解析数据
-    rounds = parse_stage2_rounds(lines)
+    rounds, validation_error = parse_stage2_rounds_checked(lines)
+
+    if validation_error is not None:
+        print("Invalid STAGE2_ROUND data: {}".format(validation_error))
+        sys.exit(1)
 
     if not rounds:
         print("No STAGE2_ROUND* data found in {}".format(args.input))
