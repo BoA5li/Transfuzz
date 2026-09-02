@@ -60,7 +60,6 @@ class Stage2Controller(object):
         self.compile_timeout = config.get("compile_timeout", 20)
 
         self.report_interval = config.get("report_interval", 30)
-        self.trials_per_round = config.get("trials_per_round", 1000)
 
         # ============================================================
         # ✅ 新增：失败统计
@@ -617,7 +616,8 @@ class Stage2Controller(object):
                 return None
 
             # 评估。无效 ROUND 数据属于测量失败，不能作为零分种子入池。
-            eval_result = stage2_evaluate(log_lines)
+            eval_result = stage2_evaluate(
+                log_lines, expected_secret=self.expected_secret)
             if eval_result.get("detail") == "invalid_stage2_data":
                 self.failure_stats["invalid_round_data"] += 1
                 logger.error(
