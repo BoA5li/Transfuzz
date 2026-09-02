@@ -24,7 +24,8 @@ import time
 
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
-from stage2_evaluator import stage2_evaluate
+from stage2_evaluator import stage2_evaluate, parse_stage2_pmu_status
+from stage2_pmu_preflight import run_stage2_pmu_preflight
 
 logger = logging.getLogger("stage2")
 
@@ -72,11 +73,14 @@ class Stage2Controller(object):
             "run_timeout": 0,         # 运行超时
             "eval_exception": 0,      # 评估流程异常
             "no_op_mutation": 0,      # 无效变异（NO-OP）
+            "l1d_pmu_unavailable": 0,
         }
 
-        # 预编译 stage3_driver_safe.o（只编译一次）
+        self.pmu_preflight_results = config.get("pmu_preflight_results")
+
+        # Precompile only after PMU preflight, so initialization work cannot
+        # precede the measurement-validity gate in standalone Stage 2 runs.
         self.stage3_obj = os.path.join(self.work_dir, "stage3_driver_safe.o")
-        self._precompile_stage3_obj()
 
         # anchors
         self.anchors = []
@@ -155,6 +159,38 @@ class Stage2Controller(object):
         logger.info("=" * 60)
         logger.info("Stage 2: Initialization")
         logger.info("=" * 60)
+
+        preflight = None
+        if isinstance(self.pmu_preflight_results, dict):
+            preflight = self.pmu_preflight_results.get("l1d")
+        if preflight is None:
+            preflight = run_stage2_pmu_preflight(
+                self.cc, self.pmu_helper_obj, self.work_dir,
+                compile_timeout=self.compile_timeout,
+                run_timeout=min(self.run_timeout, 10))
+        preflight_report = os.path.join(
+            self.work_dir, "stage2_l1d_pmu_preflight.json")
+        try:
+            with open(preflight_report, "w") as report_file:
+                json.dump(preflight, report_file, indent=2, sort_keys=True)
+        except (OSError, TypeError) as exc:
+            self.framework_error = (
+                "cannot persist Stage 2 PMU preflight report: {}".format(exc))
+            return []
+        if not preflight.get("ok", False):
+            self.failure_stats["l1d_pmu_unavailable"] += 1
+            self.framework_error = preflight.get(
+                "reason", "Stage 2 L1D PMU preflight failed")
+            logger.error("Stage 2 L1D PMU preflight FAILED: {}".format(
+                self.framework_error))
+            return []
+        logger.info(
+            "Stage 2 L1D PMU preflight PASSED: event={}, raw={}, value={} "
+            "(zero is a valid successful read)".format(
+                preflight.get("event"), preflight.get("raw_event"),
+                preflight.get("value")))
+
+        self._precompile_stage3_obj()
 
         # Stage 1 passed → Stage 2 种子
         stage2_seeds = []
@@ -555,6 +591,15 @@ class Stage2Controller(object):
             if log_lines is None:
                 return None
 
+            pmu_status, pmu_detail = parse_stage2_pmu_status(log_lines)
+            if pmu_status != "ok":
+                self.failure_stats["l1d_pmu_unavailable"] += 1
+                self.framework_error = (
+                    "Stage 2 L1D PMU runtime health check failed: {}".format(
+                        pmu_detail))
+                logger.error("[{}] {}".format(tag, self.framework_error))
+                return None
+
             # 评估
             return stage2_evaluate(log_lines)
 
@@ -927,15 +972,21 @@ class Stage2Controller(object):
                 if rc is not None:
                     # 进程已退出
                     stdout, stderr = proc.communicate()
+                    output = stdout.decode("utf-8", errors="ignore")
+                    lines = output.splitlines()
                     
                     if rc != 0:
                         self.failure_stats["run_failed"] += 1
+                        pmu_status, pmu_detail = parse_stage2_pmu_status(lines)
+                        if pmu_status == "error":
+                            self.failure_stats["l1d_pmu_unavailable"] += 1
+                            self.framework_error = (
+                                "Stage 2 L1D PMU runtime health check failed: "
+                                "{}".format(pmu_detail))
                         logger.debug("[{}] Execution failed: rc={}, time={:.1f}s".format(
                             tag, rc, elapsed))
                         return None
                     
-                    output = stdout.decode("utf-8", errors="ignore")
-                    lines = output.splitlines()
                     if not lines:
                         self.failure_stats["run_failed"] += 1
                         logger.debug("[{}] Empty output (time={:.1f}s)".format(tag, elapsed))
@@ -1026,14 +1077,15 @@ class Stage2Controller(object):
         if total_failures > 0:
             logger.info(
                 "  Failures: process={}, compile={} (timeout={}), "
-                "run={} (timeout={}), eval_exc={}"
+                "run={} (timeout={}), eval_exc={}, l1d_pmu_unavailable={}"
                 .format(
                     self.failure_stats["process_failed"],
                     self.failure_stats["compile_failed"],
                     self.failure_stats["compile_timeout"],
                     self.failure_stats["run_failed"],
                     self.failure_stats["run_timeout"],
-                    self.failure_stats["eval_exception"]))
+                    self.failure_stats["eval_exception"],
+                    self.failure_stats["l1d_pmu_unavailable"]))
 
         best = self.seed_pool.get_best_seed()
         if best and best.eval_detail:
@@ -1063,6 +1115,8 @@ class Stage2Controller(object):
         logger.info("  run_failed:       {}".format(self.failure_stats["run_failed"]))
         logger.info("  run_timeout:      {}".format(self.failure_stats["run_timeout"]))
         logger.info("  eval_exception:   {}".format(self.failure_stats["eval_exception"]))
+        logger.info("  l1d_pmu_unavailable: {}".format(
+            self.failure_stats["l1d_pmu_unavailable"]))
         logger.info("  no_op_mutation:   {}".format(self.failure_stats["no_op_mutation"]))  
         
         # 计算失败率

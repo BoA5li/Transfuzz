@@ -17,6 +17,15 @@ import math
 # 日志解析
 # ============================================================
 
+def parse_stage2_pmu_status(log_lines):
+    """Return the explicit runtime health marker for the L1D PMU path."""
+    for line in log_lines:
+        if "STAGE2_PMU_STATUS=OK" in line:
+            return "ok", line.strip()
+        if "STAGE2_PMU_STATUS=ERROR" in line:
+            return "error", line.strip()
+    return "missing", "STAGE2_PMU_STATUS marker missing"
+
 def parse_stage2_rounds(log_lines, max_rounds=100):
     """
     从日志行解析所有 STAGE2_ROUND{i}_... 数据。
@@ -158,6 +167,7 @@ def stage2_evaluate(log_lines):
         多轮一致性没有区分度。如果后续 driver 支持多轮，
         可以重新加入。
     """
+    pmu_status, pmu_status_detail = parse_stage2_pmu_status(log_lines)
     rounds = parse_stage2_rounds(log_lines)
 
     result = {
@@ -169,7 +179,13 @@ def stage2_evaluate(log_lines):
         "mean_target_rate": 0.0,
         "mean_control_rate": 0.0,
         "round_details": [],
+        "pmu_status": pmu_status,
+        "pmu_status_detail": pmu_status_detail,
     }
+
+    if pmu_status != "ok":
+        result["detail"] = "pmu_{}".format(pmu_status)
+        return result
 
     if not rounds:
         result["detail"] = "no_stage2_data"

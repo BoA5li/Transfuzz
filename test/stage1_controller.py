@@ -48,6 +48,7 @@ class Stage1Controller(object):
         self.brmisp_weight = config.get(
             "brmisp_weight", DEFAULT_BRMISP_WEIGHT)
         self.uops_weight = config.get("uops_weight", DEFAULT_UOPS_WEIGHT)
+        self.pmu_preflight_results = config.get("pmu_preflight_results")
 
         # ============================================================
         # ✅ 新增：超时配置
@@ -174,10 +175,15 @@ class Stage1Controller(object):
         logger.info("Stage 1: selected raw PMU event preflight")
         logger.info("=" * 60)
 
-        stage1_preflight = run_stage1_pmu_preflight(
-            self.cc, self.pmu_helper_obj, self.stage1_pmu_event,
-            self.work_dir, compile_timeout=self.compile_timeout,
-            run_timeout=min(self.run_timeout, 10))
+        preflight_results = getattr(self, "pmu_preflight_results", None)
+        stage1_preflight = None
+        if isinstance(preflight_results, dict):
+            stage1_preflight = preflight_results.get("stage1")
+        if stage1_preflight is None:
+            stage1_preflight = run_stage1_pmu_preflight(
+                self.cc, self.pmu_helper_obj, self.stage1_pmu_event,
+                self.work_dir, compile_timeout=self.compile_timeout,
+                run_timeout=min(self.run_timeout, 10))
         stage1_preflight_report = os.path.join(
             self.work_dir, "stage1_pmu_preflight.json")
         try:
@@ -210,10 +216,14 @@ class Stage1Controller(object):
         logger.info("Stage 1: UOPS PMU preflight")
         logger.info("=" * 60)
 
-        preflight = run_uops_pmu_preflight(
-            self.cc, self.pmu_uops_obj, self.work_dir,
-            compile_timeout=self.compile_timeout,
-            run_timeout=min(self.run_timeout, 10))
+        preflight = None
+        if isinstance(preflight_results, dict):
+            preflight = preflight_results.get("uops")
+        if preflight is None:
+            preflight = run_uops_pmu_preflight(
+                self.cc, self.pmu_uops_obj, self.work_dir,
+                compile_timeout=self.compile_timeout,
+                run_timeout=min(self.run_timeout, 10))
         preflight_report = os.path.join(
             self.work_dir, "uops_pmu_preflight.json")
         try:

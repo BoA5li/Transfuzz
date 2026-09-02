@@ -16,7 +16,7 @@ volatile uint8_t *vf_get_probe_addr_for_secret(uint8_t s);
 void vf_prepare_probe_region(int candidate_count);
 
 // pmu_helper 接口
-uint64_t pmu_read_l1d_miss(void);
+int pmu_read_l1d_miss_checked(uint64_t *value, int *error_number);
 
 static inline void flush_line(volatile uint8_t *addr) {
     _mm_clflush((void *)addr);
@@ -24,12 +24,15 @@ static inline void flush_line(volatile uint8_t *addr) {
 }
 
 static int probe_line_via_l1d_miss(volatile uint8_t *addr) {
+    int error_number = 0;
     _mm_lfence();
-    uint64_t m0 = pmu_read_l1d_miss();
+    uint64_t m0 = 0;
+    if (pmu_read_l1d_miss_checked(&m0, &error_number) != 0) return -1;
     _mm_lfence();
     (void)*addr;
     _mm_lfence();
-    uint64_t m1 = pmu_read_l1d_miss();
+    uint64_t m1 = 0;
+    if (pmu_read_l1d_miss_checked(&m1, &error_number) != 0) return -1;
     _mm_lfence();
     uint64_t delta = m1 - m0;
     return (delta == 0);  // 1 = hit, 0 = miss
@@ -138,12 +141,13 @@ static void maybe_run_stage3_after_stage2_round(int round_idx, uint8_t expected_
 /**
  * 在 secret = s 的条件下，对 target_s 做多次试验
  */
-static void stage2_round_dual(uint8_t secret,
+static int stage2_round_dual(uint8_t secret,
                               uint8_t target_s,
                               int trials,
                               int *out_hits_target,  int *out_total_target,
                               int *out_hits_control, int *out_total_control)
 {  
+    (void)secret;
 
     volatile uint8_t *probe_target  = vf_get_probe_addr_for_secret(target_s);
 
@@ -160,6 +164,7 @@ static void stage2_round_dual(uint8_t secret,
         for (volatile int z = 0; z < 100; z++) {}
 
         int hit_t = probe_line_via_l1d_miss(probe_target);
+        if (hit_t < 0) return -1;
 
         total_t++;
         hits_t += hit_t;
@@ -172,6 +177,7 @@ static void stage2_round_dual(uint8_t secret,
         for (volatile int z = 0; z < 100; z++) {}   // 同样的等待
 
         int hit_c = probe_line_via_l1d_miss(probe_target);
+        if (hit_c < 0) return -1;
 
         total_c++;
         hits_c += hit_c;
@@ -181,6 +187,7 @@ static void stage2_round_dual(uint8_t secret,
     *out_total_target  = total_t;
     *out_hits_control  = hits_c;
     *out_total_control = total_c;
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -194,9 +201,13 @@ int main(int argc, char **argv)
 
     uint8_t s0 = g_expected_secret;
     int hits_t0, tot_t0, hits_c0, tot_c0;
-    stage2_round_dual(s0, s0, trials,
-                      &hits_t0, &tot_t0,
-                      &hits_c0, &tot_c0);
+    if (stage2_round_dual(s0, s0, trials,
+                          &hits_t0, &tot_t0,
+                          &hits_c0, &tot_c0) != 0) {
+        printf("STAGE2_PMU_STATUS=ERROR detail=l1d_miss_read_failed\n");
+        return 2;
+    }
+    printf("STAGE2_PMU_STATUS=OK event=MEM_LOAD_RETIRED.L1_MISS\n");
 
     // 直接复用 Stage2 刚刚设置过的 secret=s0
     maybe_run_stage3_after_stage2_round(0, s0);

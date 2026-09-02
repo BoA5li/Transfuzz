@@ -41,6 +41,14 @@ class PipelineContractTests(unittest.TestCase):
     def setUp(self):
         Seed._next_id = 0
 
+    @staticmethod
+    def _preflight_ok(*args, **kwargs):
+        return ({
+            "stage1": {"ok": True},
+            "uops": {"ok": True},
+            "l1d": {"ok": True},
+        }, None)
+
     def test_lock_export_does_not_allocate_seed_id(self):
         seed = Seed("seed.s", cross_stage_locked_pcs={"0x10"})
         seed.current_stage_mutated_pcs.add("0x20")
@@ -61,7 +69,10 @@ class PipelineContractTests(unittest.TestCase):
                 mock.patch.object(pipeline, "Stage1Controller",
                                   _Stage1WithOnePass), \
                 mock.patch.object(pipeline, "Stage2Controller",
-                                  Stage2NoFinding):
+                                  Stage2NoFinding), \
+                mock.patch.object(
+                    pipeline, "run_framework_pmu_preflights",
+                    side_effect=self._preflight_ok):
             output = io.StringIO()
             with redirect_stdout(output):
                 result = pipeline.run_pipeline(_args(work_dir))
@@ -81,10 +92,24 @@ class PipelineContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work_dir, \
                 mock.patch.object(pipeline, "Stage1Controller",
                                   _Stage1WithOnePass), \
-                mock.patch.object(pipeline, "Stage2Controller", Stage2Failure):
+                mock.patch.object(pipeline, "Stage2Controller", Stage2Failure), \
+                mock.patch.object(
+                    pipeline, "run_framework_pmu_preflights",
+                    side_effect=self._preflight_ok):
             result = pipeline.run_pipeline(_args(work_dir))
 
         self.assertEqual(result.exit_code, pipeline.EXIT_FRAMEWORK_ERROR)
+
+    def test_collective_pmu_failure_stops_before_stage1(self):
+        with tempfile.TemporaryDirectory() as work_dir, \
+                mock.patch.object(pipeline, "Stage1Controller") as stage1, \
+                mock.patch.object(
+                    pipeline, "run_framework_pmu_preflights",
+                    return_value=({}, "l1d PMU preflight failed")):
+            result = pipeline.run_pipeline(_args(work_dir))
+
+        self.assertEqual(result.exit_code, pipeline.EXIT_FRAMEWORK_ERROR)
+        stage1.assert_not_called()
 
 
 if __name__ == "__main__":

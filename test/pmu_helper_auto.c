@@ -240,6 +240,7 @@ void pmu_stage1_return_after(void)
 #define RAW_L1D_MISS  ((0x08ULL << 8) | 0xD1)
 
 static int fd_l1d_miss = -1;
+static int l1d_miss_open_errno = 0;
 
 static int setup_l1d_miss_event(void)
 {
@@ -256,20 +257,47 @@ static int setup_l1d_miss_event(void)
 
     int fd = perf_event_open_sys(&pe, 0, -1, -1, 0);
     if (fd == -1) {
+        l1d_miss_open_errno = errno;
         fprintf(stderr, "Error opening L1D miss event (0x%llx): %s\n",
                 (unsigned long long)RAW_L1D_MISS, strerror(errno));
     }
     return fd;
 }
 
-/* 对外导出：读取当前 L1D miss 计数 */
+/* Checked interface: a successful counter value of zero remains unambiguous. */
+int pmu_read_l1d_miss_checked(uint64_t *value, int *error_number)
+{
+    if (error_number != NULL) *error_number = 0;
+    if (value == NULL) {
+        if (error_number != NULL) *error_number = EINVAL;
+        return -1;
+    }
+    if (fd_l1d_miss < 0) {
+        if (error_number != NULL) {
+            *error_number = l1d_miss_open_errno ? l1d_miss_open_errno : ENODEV;
+        }
+        return -1;
+    }
+    if (read(fd_l1d_miss, value, sizeof(*value)) != sizeof(*value)) {
+        if (error_number != NULL) *error_number = errno ? errno : EIO;
+        return -1;
+    }
+    return 0;
+}
+
+/* Probe the exact descriptor used by Stage 2 production measurements. */
+int pmu_l1d_miss_preflight(uint64_t *value, int *error_number)
+{
+    uint64_t first = 0;
+    if (pmu_read_l1d_miss_checked(&first, error_number) != 0) return -1;
+    return pmu_read_l1d_miss_checked(value, error_number);
+}
+
+/* Legacy API retained for compatibility; production Stage 2 uses checked. */
 uint64_t pmu_read_l1d_miss(void)
 {
-    if (fd_l1d_miss == -1) return 0;
     uint64_t val = 0;
-    if (read(fd_l1d_miss, &val, sizeof(val)) != sizeof(val)) {
-        return 0;
-    }
+    if (pmu_read_l1d_miss_checked(&val, NULL) != 0) return 0;
     return val;
 }
 

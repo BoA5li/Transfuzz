@@ -41,6 +41,9 @@ from stage2_controller import Stage2Controller
 from stage3_controller import Stage3Controller
 from run_stage_pipeline_stage1_2_3 import (
     STAGE1_PMU_EVENTS, normalize_stage1_pmu_event)
+from stage1_pmu_preflight import run_stage1_pmu_preflight
+from uops_pmu_preflight import run_uops_pmu_preflight
+from stage2_pmu_preflight import run_stage2_pmu_preflight
 
 
 logger = logging.getLogger("pipeline")
@@ -63,12 +66,48 @@ class PipelineOutcome(object):
 # 主流水线
 # ================================================================
 
+def run_framework_pmu_preflights(args, work_dir):
+    """Validate every PMU dependency before any seed processing begins."""
+    preflight_dir = os.path.join(str(work_dir), "pmu_preflight")
+    os.makedirs(preflight_dir, exist_ok=True)
+    results = {
+        "stage1": run_stage1_pmu_preflight(
+            args.gcc, args.pmu_helper_obj, args.stage1_pmu_event,
+            preflight_dir),
+        "uops": run_uops_pmu_preflight(
+            args.gcc, args.pmu_uops_obj, preflight_dir),
+        "l1d": run_stage2_pmu_preflight(
+            args.gcc, args.pmu_helper_obj, preflight_dir),
+    }
+    report_path = os.path.join(preflight_dir, "framework_pmu_preflight.json")
+    try:
+        with open(report_path, "w") as report_file:
+            json.dump(results, report_file, indent=2, sort_keys=True)
+    except (OSError, TypeError) as exc:
+        return None, "cannot persist framework PMU preflight report: {}".format(
+            exc)
+    for name in ("stage1", "uops", "l1d"):
+        if not results[name].get("ok", False):
+            return results, "{} PMU preflight failed: {}".format(
+                name, results[name].get("reason", "unknown failure"))
+    return results, None
+
 def run_pipeline(args):
     """三阶段自动化流水线主函数"""
     start_time = time.time()
 
     work_dir = Path(args.work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("=" * 70)
+    logger.info("PIPELINE: Collective PMU preflight")
+    logger.info("=" * 70)
+    pmu_preflight_results, preflight_error = \
+        run_framework_pmu_preflights(args, work_dir)
+    if preflight_error is not None:
+        logger.error("PIPELINE: {}".format(preflight_error))
+        _print_final_result(False, "PMU preflight framework error", start_time)
+        return PipelineOutcome(EXIT_FRAMEWORK_ERROR)
 
     expected_secret_char = args.expected_secret[0]
     expected_secret_byte = ord(expected_secret_char)
@@ -94,6 +133,7 @@ def run_pipeline(args):
         "pmu_helper_obj": args.pmu_helper_obj,
         "pmu_uops_obj": args.pmu_uops_obj,
         "stage1_pmu_event": args.stage1_pmu_event,
+        "pmu_preflight_results": pmu_preflight_results,
     }
 
     s1_ctrl = Stage1Controller(s1_config)
@@ -152,6 +192,7 @@ def run_pipeline(args):
         "cc": args.gcc,
         "pmu_helper_obj": args.pmu_helper_obj,
         "expected_secret": expected_secret_byte,
+        "pmu_preflight_results": pmu_preflight_results,
     }
 
     s2_ctrl = Stage2Controller(s2_config)
