@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stage2_controller
 import stage2_evaluator
 import stage2_pmu_preflight as preflight
+from seed_pool import Seed
 
 
 def _completed(returncode=0, stdout=b"", stderr=b""):
@@ -108,6 +109,76 @@ class Stage2PmuPreflightTests(unittest.TestCase):
                          "perf_event permission denied")
         self.assertEqual(controller.failure_stats["l1d_pmu_unavailable"], 1)
         precompile.assert_not_called()
+
+    @staticmethod
+    def _healthy_preflight():
+        return {
+            "ok": True,
+            "reason": "ok",
+            "event": "MEM_LOAD_RETIRED.L1_MISS",
+            "raw_event": "0x08d1",
+            "value": 0,
+        }
+
+    @staticmethod
+    def _valid_evaluation():
+        return {
+            "score": 1.0,
+            "passed": True,
+            "mean_signal": 1.0,
+            "mean_target_rate": 1.0,
+            "mean_control_rate": 0.0,
+        }
+
+    def _controller(self, work_dir, budget=3):
+        return stage2_controller.Stage2Controller({
+            "work_dir": work_dir,
+            "budget": budget,
+            "report_interval": 100,
+            "pmu_preflight_results": {"l1d": self._healthy_preflight()},
+        })
+
+    def test_framework_error_stops_remaining_baseline_evaluations(self):
+        with tempfile.TemporaryDirectory() as work_dir:
+            controller = self._controller(work_dir)
+            seeds = [Seed("seed_a.s"), Seed("seed_b.s")]
+
+            def fail_framework(*args, **kwargs):
+                controller.framework_error = "L1D PMU runtime read failed"
+                return None
+
+            with mock.patch.object(controller, "_precompile_stage3_obj"), \
+                    mock.patch.object(
+                        controller, "_evaluate_seed",
+                        side_effect=fail_framework) as evaluate:
+                passed = controller.run(seeds)
+
+        self.assertEqual(passed, [])
+        self.assertEqual(evaluate.call_count, 1)
+        self.assertEqual(controller.framework_error,
+                         "L1D PMU runtime read failed")
+
+    def test_framework_error_stops_remaining_mutation_rounds(self):
+        with tempfile.TemporaryDirectory() as work_dir:
+            controller = self._controller(work_dir)
+            seed = Seed("seed.s")
+
+            def fail_first_round(round_idx):
+                controller.framework_error = "L1D PMU runtime read failed"
+
+            with mock.patch.object(controller, "_precompile_stage3_obj"), \
+                    mock.patch.object(
+                        controller, "_evaluate_seed",
+                        return_value=self._valid_evaluation()), \
+                    mock.patch.object(
+                        controller, "_mutation_round",
+                        side_effect=fail_first_round) as mutate:
+                passed = controller.run([seed])
+
+        self.assertEqual(passed, [])
+        self.assertEqual(mutate.call_count, 1)
+        self.assertEqual(controller.framework_error,
+                         "L1D PMU runtime read failed")
 
 
 if __name__ == "__main__":
