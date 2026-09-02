@@ -23,8 +23,8 @@ def main():
         description="Post-process Stage 2 output: cache side-channel analysis."
     )
     ap.add_argument("input", help="Input log file (Stage 2 run output)")
-    ap.add_argument("--high-threshold", type=float, default=0.6,
-                    help="Target hit rate threshold for PASS (default: 0.6)")
+    ap.add_argument("--high-threshold", type=float, default=0.7,
+                    help="Target hit rate threshold for PASS (default: 0.7)")
     ap.add_argument("--low-threshold", type=float, default=0.2,
                     help="Max control hit rate for PASS (default: 0.2)")
     ap.add_argument("--verbose", "-v", action="store_true",
@@ -81,17 +81,14 @@ def main():
         print("  Median signal:     {:.4f}".format(eval_result["median_signal"]))
     if eval_result.get("signal_std", 0) > 0:
         print("  Signal std:        {:.4f}".format(eval_result["signal_std"]))
-    print("  Consistency:       {:.4f}".format(eval_result.get("consistency", 0)))
     print("")
     print("  Score breakdown:")
-    print("    Signal score:    {:.4f} (weight: 0.50)".format(
+    print("    Signal score:    {:.4f} (weight: 0.55)".format(
         eval_result.get("signal_score", 0)))
-    print("    Target score:    {:.4f} (weight: 0.20)".format(
+    print("    Target score:    {:.4f} (weight: 0.25)".format(
         eval_result.get("target_score", 0)))
-    print("    Control score:   {:.4f} (weight: 0.15)".format(
+    print("    Control score:   {:.4f} (weight: 0.20)".format(
         eval_result.get("control_score", 0)))
-    print("    Consistency:     {:.4f} (weight: 0.15)".format(
-        eval_result.get("consistency", 0)))
     print("  Combined score:    {:.4f}".format(eval_result["score"]))
     print("")
 
@@ -109,12 +106,18 @@ def main():
                   mean_t, args.high_threshold, mean_c, args.low_threshold))
 
     # 信号判定
+    signal_threshold = eval_result.get("min_mean_signal", 0.50)
+    target_threshold = eval_result.get("min_mean_target_rate", 0.70)
     if eval_result["passed"]:
-        print("Stage 2 (signal): PASS (signal={:.4f} >= 0.05)".format(
-            eval_result["mean_signal"]))
+        print("Stage 2 (signal): PASS (signal={:.4f} >= {:.2f} AND "
+              "target={:.4f} >= {:.2f})".format(
+                  eval_result["mean_signal"], signal_threshold,
+                  eval_result["mean_target_rate"], target_threshold))
     else:
-        print("Stage 2 (signal): FAIL (signal={:.4f} < 0.05)".format(
-            eval_result["mean_signal"]))
+        print("Stage 2 (signal): FAIL (signal={:.4f} vs {:.2f}, "
+              "target={:.4f} vs {:.2f})".format(
+                  eval_result["mean_signal"], signal_threshold,
+                  eval_result["mean_target_rate"], target_threshold))
 
     sys.exit(0 if eval_result["passed"] else 2)
 
