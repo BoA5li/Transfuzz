@@ -26,6 +26,8 @@ from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
 from stage2_evaluator import stage2_evaluate, parse_stage2_pmu_status
 from stage2_pmu_preflight import run_stage2_pmu_preflight
+from run_stage_pipeline_stage1_2_3 import (
+    STAGE1_PMU_EVENTS, STAGE1_PMU_EVENT_MARKERS)
 
 logger = logging.getLogger("stage2")
 
@@ -650,15 +652,15 @@ class Stage2Controller(object):
         because those may be part of the victim's control-flow contract.
         """
         result = []
+        # Derive event-specific calls and marker symbols from the same
+        # authoritative tables used by the Stage 1 rewriter.  A newly added
+        # Stage 1 PMU event therefore cannot silently escape Stage 2 cleanup.
         stage1_calls = {
-            "pmu_stage1_before",
-            "pmu_stage1_after",
-            "pmu_stage1_indirect_before",
-            "pmu_stage1_indirect_after",
-            "pmu_stage1_disambiguation_before",
-            "pmu_stage1_disambiguation_after",
-            "pmu_stage1_return_before",
-            "pmu_stage1_return_after",
+            symbol
+            for call_pair in STAGE1_PMU_EVENTS.values()
+            for symbol in call_pair
+        }
+        stage1_calls.update({
             "pmu_stage1_set_phase",
             "pmu_uops_snap_before",
             "pmu_uops_snap_after",
@@ -672,13 +674,9 @@ class Stage2Controller(object):
             "pmu_uops_get_status_code",
             "pmu_uops_get_status_message",
             "pmu_uops_get_mode",
-        }
+        })
 
-        event_markers = {
-            "pmu_stage1_event_indirect_selected",
-            "pmu_stage1_event_disambiguation_selected",
-            "pmu_stage1_event_return_selected",
-        }
+        event_markers = set(STAGE1_PMU_EVENT_MARKERS.values())
 
         stage1_markers = [
             "STAGE1_PMU_BEGIN",
