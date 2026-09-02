@@ -65,8 +65,10 @@ class Stage2PmuPreflightTests(unittest.TestCase):
     def test_runtime_status_is_required_by_evaluator(self):
         log = [
             "STAGE2_ROUND0_SECRET=89",
+            "STAGE2_ROUND0_TARGET_VALUE=89",
             "STAGE2_ROUND0_TARGET_HITS=10",
             "STAGE2_ROUND0_TARGET_TOTAL=10",
+            "STAGE2_ROUND0_CONTROL_VALUE=89",
             "STAGE2_ROUND0_CONTROL_HITS=0",
             "STAGE2_ROUND0_CONTROL_TOTAL=10",
         ]
