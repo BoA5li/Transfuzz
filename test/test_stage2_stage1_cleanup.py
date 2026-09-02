@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage1_controller import Stage1Controller
 from stage2_controller import Stage2Controller
+from run_stage_pipeline_stage1_2_3 import (
+    STAGE1_PMU_EVENTS, STAGE1_PMU_EVENT_MARKERS)
 
 
 class Stage2Stage1CleanupTests(unittest.TestCase):
@@ -18,14 +20,10 @@ class Stage2Stage1CleanupTests(unittest.TestCase):
 
     def test_all_stage1_event_and_uops_calls_are_removed(self):
         symbols = [
-            "pmu_stage1_before",
-            "pmu_stage1_after",
-            "pmu_stage1_indirect_before",
-            "pmu_stage1_indirect_after",
-            "pmu_stage1_disambiguation_before",
-            "pmu_stage1_disambiguation_after",
-            "pmu_stage1_return_before",
-            "pmu_stage1_return_after",
+            symbol
+            for call_pair in STAGE1_PMU_EVENTS.values()
+            for symbol in call_pair
+        ] + [
             "pmu_stage1_set_phase",
             "pmu_uops_snap_before",
             "pmu_uops_snap_after",
@@ -48,19 +46,20 @@ class Stage2Stage1CleanupTests(unittest.TestCase):
                             for line in cleaned))
 
     def test_event_selection_section_is_removed_as_one_unit(self):
-        source = [
-            "\t.pushsection .rodata\n",
-            "\t.globl pmu_stage1_event_indirect_selected\n",
-            "pmu_stage1_event_indirect_selected:\n",
-            "\t.byte 1\n",
-            "\t.popsection\n",
-            "\tmovq %rax, %rbx\n",
-        ]
-        cleaned = self.controller._remove_stage1_instrumentation(source)
+        for marker in STAGE1_PMU_EVENT_MARKERS.values():
+            source = [
+                "\t.pushsection .rodata\n",
+                "\t.globl {}\n".format(marker),
+                "{}:\n".format(marker),
+                "\t.byte 1\n",
+                "\t.popsection\n",
+                "\tmovq %rax, %rbx\n",
+            ]
+            cleaned = self.controller._remove_stage1_instrumentation(source)
 
-        self.assertTrue(all(line.startswith("# [s2-removed]")
-                            for line in cleaned[:5]))
-        self.assertEqual(cleaned[5], source[5])
+            self.assertTrue(all(line.startswith("# [s2-removed]")
+                                for line in cleaned[:5]), marker)
+            self.assertEqual(cleaned[5], source[5], marker)
 
     def test_victim_boundaries_nop_region_and_user_lfence_are_retained(self):
         source = [
