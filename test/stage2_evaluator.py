@@ -37,18 +37,23 @@ def parse_stage2_pmu_status(log_lines):
 _ROUND_FIELD_RE = re.compile(
     r"STAGE2_ROUND(\d+)_(SECRET|TARGET_VALUE|TARGET_HITS|TARGET_TOTAL|"
     r"CONTROL_VALUE|CONTROL_HITS|CONTROL_TOTAL)\s*=\s*(-?\d+)")
-_REQUIRED_COUNTER_FIELDS = (
+_REQUIRED_ROUND_FIELDS = (
+    "secret", "target_value", "control_value",
     "target_hits", "target_total", "control_hits", "control_total")
 
 
-def parse_stage2_rounds_checked(log_lines, max_rounds=100):
+def parse_stage2_rounds_checked(log_lines, max_rounds=100,
+                                expected_secret=None):
     """
     Parse and validate all Stage 2 rounds.
 
     Returns ``(rounds, validation_error)``.  A present round is accepted only
-    when both target/control hit and total fields are present, totals are
-    positive, and each hit count is in ``[0, total]``.  Round numbering must be
-    contiguous from ROUND0 so a truncated middle round cannot be overlooked.
+    when its secret/probe metadata and target/control counters are complete,
+    ``SECRET == TARGET_VALUE == CONTROL_VALUE``, totals are positive, and each
+    hit count is in ``[0, total]``.  If ``expected_secret`` is supplied, the
+    logged secret must also match that controller-side value.  Round numbering
+    must be contiguous from ROUND0 so a truncated middle round cannot be
+    overlooked.
     """
     by_round = {}
     for line in log_lines:
@@ -72,10 +77,29 @@ def parse_stage2_rounds_checked(log_lines, max_rounds=100):
     for round_idx in round_indices:
         data = by_round[round_idx]
         missing = [
-            field for field in _REQUIRED_COUNTER_FIELDS if field not in data]
+            field for field in _REQUIRED_ROUND_FIELDS if field not in data]
         if missing:
             return [], "round_{}_missing_fields: {}".format(
                 round_idx, ",".join(missing))
+
+        for field in ("secret", "target_value", "control_value"):
+            value = data[field]
+            if value < 0 or value > 255:
+                return [], "round_{}_{}_out_of_byte_range: {}".format(
+                    round_idx, field, value)
+
+        secret = data["secret"]
+        target_value = data["target_value"]
+        control_value = data["control_value"]
+        if secret != target_value:
+            return [], "round_{}_secret_target_mismatch: {}!={}".format(
+                round_idx, secret, target_value)
+        if target_value != control_value:
+            return [], "round_{}_target_control_mismatch: {}!={}".format(
+                round_idx, target_value, control_value)
+        if expected_secret is not None and secret != int(expected_secret):
+            return [], "round_{}_expected_secret_mismatch: {}!={}".format(
+                round_idx, secret, int(expected_secret))
 
         for group in ("target", "control"):
             hits = data["{}_hits".format(group)]
@@ -169,7 +193,7 @@ def _std(data):
     return math.sqrt(sum((x - m) ** 2 for x in data) / float(len(data)))
 
 
-def stage2_evaluate(log_lines):
+def stage2_evaluate(log_lines, expected_secret=None):
     """
     Stage 2 种子评分（优化版）。
 
@@ -193,7 +217,8 @@ def stage2_evaluate(log_lines):
         可以重新加入。
     """
     pmu_status, pmu_status_detail = parse_stage2_pmu_status(log_lines)
-    rounds, round_validation_error = parse_stage2_rounds_checked(log_lines)
+    rounds, round_validation_error = parse_stage2_rounds_checked(
+        log_lines, expected_secret=expected_secret)
 
     result = {
         "score": 0.0,
