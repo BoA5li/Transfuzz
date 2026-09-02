@@ -13,6 +13,14 @@ import re
 import math
 
 
+# Stage 2 accepts only a strong target-vs-control cache signal.  With the
+# default 1000 trials, these thresholds require a target-control gap equivalent
+# to at least 500/1000 trials and a target hit rate of at least 700/1000.
+STAGE2_MIN_MEAN_SIGNAL = 0.50
+STAGE2_MIN_MEAN_TARGET_RATE = 0.70
+_THRESHOLD_EPSILON = 1e-12
+
+
 # ============================================================
 # 日志解析
 # ============================================================
@@ -161,7 +169,7 @@ def stage2_evaluate(log_lines):
               control_score * 0.20
 
     通过判定:
-      passed = (mean_signal >= 0.05) AND (mean_target_rate >= 0.02)
+      passed = (mean_signal >= 0.50) AND (mean_target_rate >= 0.70)
 
     注: consistency 维度已移除。当前 driver 只运行单轮（ROUND0），
         多轮一致性没有区分度。如果后续 driver 支持多轮，
@@ -246,7 +254,10 @@ def stage2_evaluate(log_lines):
     )
 
     # === 通过判定（统一使用 mean） ===
-    passed = (mean_signal >= 0.05) and (mean_target >= 0.02)
+    passed = (
+        mean_signal + _THRESHOLD_EPSILON >= STAGE2_MIN_MEAN_SIGNAL and
+        mean_target + _THRESHOLD_EPSILON >= STAGE2_MIN_MEAN_TARGET_RATE
+    )
 
     result.update({
         "score": score,
@@ -257,6 +268,8 @@ def stage2_evaluate(log_lines):
         "signal_score": signal_score,
         "target_score": target_score,
         "control_score": control_score,
+        "min_mean_signal": STAGE2_MIN_MEAN_SIGNAL,
+        "min_mean_target_rate": STAGE2_MIN_MEAN_TARGET_RATE,
     })
 
     return result
