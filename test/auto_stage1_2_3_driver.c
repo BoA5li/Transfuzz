@@ -126,16 +126,17 @@ static void print_stage3_round_result(int round_idx, const stage3_result_t *r)
     printf("STAGE3_ROUND%d_MATCH=%d\n", round_idx, r->match);
 }
 
-static void maybe_run_stage3_after_stage2_round(int round_idx, uint8_t expected_secret)
+static int run_stage3_only(int round_idx, uint8_t expected_secret)
 {
-    if (!stage3_enabled) return;
+    if (!stage3_enabled) return -1;
 
     stage3_result_t r;
     if (stage3_run_single_reuse_secret(&g_stage3_cfg, expected_secret, &r) != 0) {
         fprintf(stderr, "Stage3 failed for round %d\n", round_idx);
-        return;
+        return -1;
     }
     print_stage3_round_result(round_idx, &r);
+    return 0;
 }
 
 static inline void stage2_probe_wait(void)
@@ -219,10 +220,20 @@ int main(int argc, char **argv)
 
     uint8_t s0 = g_expected_secret;
     /*
-     * Prepare the complete byte-indexed probe region once, before any PMU
-     * sample is collected.  This faults in and initializes victim-owned
-     * storage without biasing a trial: every target and control sample still
-     * flushes the measured line independently immediately before probing it.
+     * Stage 3 has its own Flush+Reload observation and does not consume the
+     * Stage 2 L1D-miss counters.  In Stage 3 mode, enter it directly: running
+     * the 1000 paired Stage 2 PMU trials first would add unrelated PMU work,
+     * predictor/cache warm-up and substantial timing overhead to every Stage
+     * 3 seed evaluation.  Stage 2 mode retains the original paired protocol.
+     */
+    if (stage3_enabled) {
+        return run_stage3_only(0, s0) == 0 ? 0 : 4;
+    }
+
+    /*
+     * Prepare the complete byte-indexed probe region once, before any Stage 2
+     * PMU sample is collected.  The Stage 3 backend performs its own matching
+     * initialization, so it does not pass through this Stage 2-only step.
      */
     vf_prepare_probe_region(256);
 
@@ -241,9 +252,6 @@ int main(int argc, char **argv)
     printf("STAGE2_PMU_STATUS=OK event=MEM_LOAD_RETIRED.L1_MISS\n");
     printf("STAGE2_TRIAL_SCHEDULE=PAIRED_ALTERNATING trials_per_group=%d\n",
            trials);
-
-    // 直接复用 Stage2 刚刚设置过的 secret=s0
-    maybe_run_stage3_after_stage2_round(0, s0);
 
     printf("STAGE2_ROUND0_SECRET=%u\n", (unsigned)s0);
     printf("STAGE2_ROUND0_TARGET_VALUE=%u\n", (unsigned)s0);

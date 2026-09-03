@@ -36,6 +36,8 @@ import traceback
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
 from stage3_evaluator import stage3_evaluate
+from run_stage_pipeline_stage1_2_3 import (
+    STAGE1_PMU_EVENTS, STAGE1_PMU_EVENT_MARKERS)
 from stage3_config import (
     mutate_stage3_config,
     save_stage3_config,
@@ -973,24 +975,77 @@ class Stage3Controller(object):
             self.stage3_obj = None
 
     def _remove_stage1_instrumentation(self, asm_lines):
-        """移除 Stage 1 PMU 插桩代码"""
+        """Remove every framework-owned Stage 1 PMU/UOPS artifact.
+
+        The event call pairs and selection markers are derived from the same
+        authoritative tables as Stage 1 instrumentation.  This prevents a new
+        selectable Stage 1 PMU event from silently leaking into Stage 3.
+        Victim boundaries and unmarked instructions remain unchanged.
+        """
         result = []
-        stage1_calls = [
-            "pmu_stage1_before", "pmu_stage1_after",
-            "pmu_uops_snap_before", "pmu_uops_snap_after",
-            "pmu_stage1_get_count", "pmu_stage1_get_delta",
-        ]
+        stage1_calls = {
+            symbol
+            for call_pair in STAGE1_PMU_EVENTS.values()
+            for symbol in call_pair
+        }
+        stage1_calls.update({
+            "pmu_stage1_set_phase",
+            "pmu_uops_snap_before",
+            "pmu_uops_snap_after",
+            "pmu_uops_print_results",
+            "pmu_stage1_get_count",
+            "pmu_stage1_get_delta",
+            "pmu_uops_get_count",
+            "pmu_uops_get_transient",
+            "pmu_uops_get_issued_delta",
+            "pmu_uops_get_retired_delta",
+            "pmu_uops_get_status_code",
+            "pmu_uops_get_status_message",
+            "pmu_uops_get_mode",
+        })
+        event_markers = set(STAGE1_PMU_EVENT_MARKERS.values())
         stage1_markers = [
             "STAGE1_PMU_BEGIN", "STAGE1_PMU_END",
             "STAGE1_UOPS_BEGIN", "STAGE1_UOPS_END",
             "# [stage1", "# --- PMU", "# --- UOPS",
         ]
 
-        for line in asm_lines:
+        # A non-default event marker is emitted as a complete section.  Remove
+        # the whole block, not only its label, to avoid retaining a global
+        # selection symbol and its data byte at Stage 3 link time.
+        marker_section_lines = set()
+        section_start = None
+        for index, line in enumerate(asm_lines):
             stripped = line.strip()
-            is_call = any(
-                "call" in stripped and func in stripped
-                for func in stage1_calls)
+            if stripped.startswith(".pushsection"):
+                section_start = index
+            if section_start is not None and any(
+                    marker in stripped for marker in event_markers):
+                end = section_start
+                while end < len(asm_lines):
+                    marker_section_lines.add(end)
+                    if asm_lines[end].strip().startswith(".popsection"):
+                        break
+                    end += 1
+                section_start = None
+            elif section_start is not None and stripped.startswith(
+                    ".popsection"):
+                section_start = None
+
+        call_pattern = re.compile(
+            r"^callq?\s+([A-Za-z_.$][A-Za-z0-9_.$]*)"
+            r"(?:@(?:PLT|GOTPCREL))?(?:\s|$)")
+
+        for index, line in enumerate(asm_lines):
+            stripped = line.strip()
+
+            if index in marker_section_lines:
+                result.append("# [s3-removed] {}\n".format(stripped))
+                continue
+
+            call_match = call_pattern.match(stripped)
+            is_call = bool(
+                call_match and call_match.group(1) in stage1_calls)
             is_marker = any(m in stripped for m in stage1_markers)
             if is_call or is_marker:
                 result.append("# [s3-removed] {}\n".format(stripped))

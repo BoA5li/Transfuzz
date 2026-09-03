@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdlib.h>
 
 /* ----------------- 通用 perf_event_open 包装 ----------------- */
 
@@ -308,6 +309,12 @@ uint64_t pmu_read_l1d_miss(void)
 __attribute__((constructor))
 static void pmu_init(void)
 {
+    const char *stage3_only = getenv("ENABLE_STAGE3");
+    if (stage3_only != NULL && strcmp(stage3_only, "1") == 0) {
+        /* Stage 3 uses timestamped Flush+Reload, not Stage 1 or Stage 2 PMU. */
+        return;
+    }
+
     /* Selection happens once before main(), outside every measured window. */
     if (&pmu_stage1_event_return_selected != NULL) {
         fd_stage1_return = setup_stage1_event(
