@@ -24,15 +24,12 @@ import logging
 
 logger = logging.getLogger("stage3_config")
 
-
-# Fixed Stage 3 observation budget.  This is deliberately not part of
-# STAGE3_PARAM_SPECS: changing the sample size while mutating a candidate
-# makes scores from different candidates incomparable.
+# Detection-sample size is an experimental constant, not a mutation axis.
 STAGE3_DETECTION_ROUNDS = 20
 
 
 # ====================================================================
-# 可变异参数规格定义
+# 参数规格定义 (保持不变)
 # ====================================================================
 
 STAGE3_PARAM_SPECS = {
@@ -237,8 +234,12 @@ def save_stage3_config(config, path):
     os.makedirs(
         os.path.dirname(path) if os.path.dirname(path) else ".",
         exist_ok=True)
+    persisted_config = {
+        key: value for key, value in config.items()
+        if key in STAGE3_PARAM_SPECS
+    }
     with open(path, 'w') as f:
-        json.dump(config, f, indent=2)
+        json.dump(persisted_config, f, indent=2)
     logger.debug("Saved Stage 3 config to {}".format(path))
 
 
@@ -249,13 +250,14 @@ def load_stage3_config(config_path):
             "Config file not found: {}, using defaults".format(config_path))
         return get_stage3_defaults()
     with open(config_path, 'r') as f:
-        config = json.load(f)
-    if "rounds" in config:
-        logger.warning(
-            "Ignoring legacy mutable Stage 3 config field 'rounds'; "
-            "detection always uses {} rounds".format(
-                STAGE3_DETECTION_ROUNDS))
-        config.pop("rounds", None)
+        loaded_config = json.load(f)
+    # Drop retired/unknown keys (notably the formerly mutable ``rounds``)
+    # so old work directories cannot reintroduce an experimental variable.
+    config = get_stage3_defaults()
+    config.update({
+        key: value for key, value in loaded_config.items()
+        if key in STAGE3_PARAM_SPECS
+    })
     logger.info("Loaded Stage 3 config from {}".format(config_path))
     return config
 

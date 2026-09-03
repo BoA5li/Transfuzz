@@ -227,6 +227,8 @@ RSB_STACK_PATTERNS = [
 # 第二部分：Stage 3 配置变异
 # ====================================================================
 
+STAGE3_DETECTION_ROUNDS = 20
+
 STAGE3_DEFAULT_CONFIG = {
     "cache_hit_threshold": {
         "default": 80,
@@ -238,12 +240,6 @@ STAGE3_DEFAULT_CONFIG = {
         "default": 512,
         "choices": [64, 128, 256, 512, 1024, 2048, 4096],
         "description": "probe array 访问步长 (bytes)",
-    },
-    "rounds": {
-        "default": 100,
-        "range": [20, 500],
-        "step_choices": [-50, -20, -10, 10, 20, 50, 100],
-        "description": "flush-reload 轮次",
     },
     "attack_repetitions": {
         "default": 1,
@@ -313,8 +309,12 @@ def generate_stage3_config_variant(base_config=None):
 
 def write_stage3_config(config, output_path):
     """将 Stage 3 配置写入 JSON 文件"""
+    persisted_config = {
+        key: value for key, value in config.items()
+        if key in STAGE3_DEFAULT_CONFIG
+    }
     with open(output_path, 'w') as f:
-        json.dump(config, f, indent=2)
+        json.dump(persisted_config, f, indent=2)
     return output_path
 
 
@@ -323,7 +323,6 @@ def generate_stage3_env(config):
     env_map = {
         "cache_hit_threshold": "STAGE3_CACHE_HIT_THRESHOLD",
         "probe_stride": "STAGE3_PROBE_STRIDE",
-        "rounds": "STAGE3_ROUNDS",
         "attack_repetitions": "STAGE3_ATTACK_REPS",
         "candidate_count": "STAGE3_CANDIDATE_COUNT",
         "noise_range_start": "STAGE3_NOISE_START",
@@ -332,7 +331,7 @@ def generate_stage3_env(config):
         "flush_wait_cycles": "STAGE3_FLUSH_WAIT",
         "reload_wait_cycles": "STAGE3_RELOAD_WAIT",
     }
-    env = {}
+    env = {"STAGE3_ROUNDS": str(STAGE3_DETECTION_ROUNDS)}
     for key, env_var in env_map.items():
         if key in config:
             env[env_var] = str(config[key])

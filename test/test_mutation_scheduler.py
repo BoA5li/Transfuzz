@@ -1027,7 +1027,7 @@ def test_11_stage3_config():
     t.check(isinstance(config1, dict), "生成的配置是字典")
     t.check("cache_hit_threshold" in config1, "配置包含 cache_hit_threshold")
     t.check("probe_stride" in config1, "配置包含 probe_stride")
-    t.check("rounds" in config1, "配置包含 rounds")
+    t.check("rounds" not in config1, "检测轮次不属于可变配置")
 
     # 检查值范围
     t.check(40 <= config1["cache_hit_threshold"] <= 200,
@@ -1035,8 +1035,9 @@ def test_11_stage3_config():
                 config1["cache_hit_threshold"]))
     t.check(config1["probe_stride"] in [64, 128, 256, 512, 1024, 2048, 4096],
             "probe_stride 在选项中: {}".format(config1["probe_stride"]))
-    t.check(20 <= config1["rounds"] <= 500,
-            "rounds 在范围内: {}".format(config1["rounds"]))
+    env = generate_stage3_env(dict(config1, rounds=500))
+    t.check(env["STAGE3_ROUNDS"] == "20",
+            "检测轮次固定为 20 且忽略配置覆盖")
 
     # 生成多个配置，验证多样性
     configs = [generate_stage3_config_variant() for _ in range(10)]

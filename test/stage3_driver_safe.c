@@ -262,11 +262,7 @@ static int stage3_backend_flush_reload_reuse_secret(
     if (candidate_count <= 0 || candidate_count > STAGE3_MAX_CANDIDATES)
         candidate_count = STAGE3_MAX_CANDIDATES;
 
-    /*
-     * Keep the statistical observation budget identical for every
-     * candidate.  cfg->rounds remains in the public struct only for source
-     * compatibility with older callers; it cannot alter detection.
-     */
+    /* Keep the observation budget identical for every candidate. */
     rounds = STAGE3_DETECTION_ROUNDS;
 
     attack_reps = cfg->attack_repetitions;
