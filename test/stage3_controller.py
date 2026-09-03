@@ -265,7 +265,16 @@ class Stage3Controller(object):
         self._protected_paths = set()
         self.seed_stage3_configs = {}
 
+        # Backward-compatible representative result plus the complete set.
+        # ``success_seed`` remains the first match for existing callers, while
+        # ``success_seeds`` records every independently evaluated match.
         self.success_seed = None
+        self.success_seeds = []
+        self.run_summary = None
+        self._run_started_at = None
+        self._baseline_evaluations = 0
+        self._mutation_rounds_attempted = 0
+        self._mutation_rounds_completed = 0
         self.framework_error = None
 
         logger.info("Stage 3 Controller initialized:")
@@ -459,13 +468,19 @@ class Stage3Controller(object):
         """
         执行 Stage 3 完整流程.
 
-        终止条件:
-          1. 任一种子 (baseline 或 mutant) match=1 -> 保存成功归档, 立即返回
-          2. budget 用完 -> 返回 None
+        match 不再是提前终止条件。每个成功种子都会立即归档，检测继续到
+        所有 baseline 与完整 mutation budget 执行结束。
 
-        返回值只包含成功种子。完整评价轨迹没有外部消费者，且种子池、
-        成功/失败归档和统计信息已经保存了运行所需证据。
+        为兼容现有调用方，返回第一个成功种子（无 match 时返回 None）；
+        所有成功种子及效率统计分别保存在 success_seeds 和 run_summary。
         """
+        self._run_started_at = time.time()
+        self._baseline_evaluations = 0
+        self._mutation_rounds_attempted = 0
+        self._mutation_rounds_completed = 0
+        self.success_seed = None
+        self.success_seeds = []
+        self.run_summary = None
         logger.info("=" * 60)
         logger.info("Stage 3: Initialization")
         logger.info("=" * 60)
@@ -531,6 +546,8 @@ class Stage3Controller(object):
                     "Baseline eval failed for seed {}".format(seed.id))
                 continue
 
+            self._baseline_evaluations += 1
+
             seed.score = eval_result["score"]
             seed.eval_detail = eval_result
             # D4: baseline 无条件入库
@@ -543,17 +560,13 @@ class Stage3Controller(object):
                     eval_result["mean_expected_latency"],
                     eval_result["passed"]))
 
-            # D5: baseline passed 也走完整成功归档
+            # Baseline match 立即归档，但继续评估其余 baseline。
             if eval_result["passed"]:
                 logger.info(
                     "  >>> SECRET RECOVERED at baseline! <<<")
-                self.success_seed = seed
-                self._archive_success(
-                    seed, tag=tag,
-                    eval_result=eval_result,
-                    stage="baseline")
-                self._report_failure_stats()
-                return seed
+                self._record_success(
+                    seed, tag=tag, eval_result=eval_result,
+                    stage="baseline", round_index=None)
 
         if not self.seed_pool.seeds:
             logger.error("No seeds survived baseline evaluation")
@@ -570,6 +583,7 @@ class Stage3Controller(object):
         logger.info("=" * 60)
 
         for round_idx in range(self.budget):
+            self._mutation_rounds_attempted += 1
             # 单轮总超时 90s (嵌套安全)
             try:
                 with _round_deadline(self.per_round_timeout):
@@ -593,31 +607,30 @@ class Stage3Controller(object):
                 round_result = None
 
             if round_result is not None:
+                self._mutation_rounds_completed += 1
                 if round_result.get("passed"):
                     logger.info(
                         ">>> SECRET RECOVERED at round {}! <<<".format(
                             round_idx))
-                    self.success_seed = round_result["seed"]
-                    self._archive_success(
+                    self._record_success(
                         round_result["seed"],
                         tag="s3_r{}".format(round_idx),
                         eval_result=round_result["seed"].eval_detail,
-                        stage="mutation_round_{}".format(round_idx))
-                    self._report_failure_stats()
-                    return round_result["seed"]
+                        stage="mutation_round_{}".format(round_idx),
+                        round_index=round_idx)
 
             if (round_idx + 1) % self.report_interval == 0:
                 self._report_stats(round_idx + 1)
 
         # budget 用完
         logger.info("=" * 60)
-        logger.info(
-            "Stage 3 complete: secret NOT recovered "
-            "within budget ({})".format(self.budget))
+        logger.info("Stage 3 complete: {} match(es) found within budget ({})"
+                    .format(len(self.success_seeds), self.budget))
         self._report_stats(self.budget)
         self._report_failure_stats()
+        self._finalize_run_summary()
 
-        return None
+        return self.success_seed
 
     # =================================================================
     # 变异轮
@@ -823,7 +836,7 @@ class Stage3Controller(object):
         mutant_seed.score = eval_result["score"]
         mutant_seed.eval_detail = eval_result
 
-        # passed: 立即返回
+        # Passed seeds remain useful parents now that detection continues.
         if eval_result["passed"]:
             logger.info(
                 "Round {}: >>> MATCH <<< score={:.4f}, "
@@ -835,6 +848,9 @@ class Stage3Controller(object):
                     config_mutated_flag, asm_mutated_flag))
             # 保护 passed seed 的 .s 文件不被后续清理
             self._protected_paths.add(mutant_seed.asm_path)
+            admitted = self.seed_pool.add(mutant_seed)
+            if admitted:
+                seed.children_produced += 1
             return {"passed": True, "seed": mutant_seed}
 
         # 入库 (由 seed_pool.add 决策)
@@ -1490,9 +1506,97 @@ class Stage3Controller(object):
                 self._protected_paths.add(seed.asm_path)
 
             logger.info("Archived SUCCESS to {}".format(dest))
+            return dest
         except Exception as e:
             logger.error("Archive success error: {}".format(e))
             logger.error("Traceback:\n{}".format(traceback.format_exc()))
+            return None
+
+    def _record_success(self, seed, tag, eval_result, stage,
+                        round_index=None):
+        """Archive one match and retain its discovery/efficiency metadata."""
+        elapsed = max(0.0, time.time() - self._run_started_at)
+        if self.success_seed is None:
+            self.success_seed = seed
+
+        archive_path = self._archive_success(
+            seed, tag=tag, eval_result=eval_result, stage=stage)
+        record = {
+            "match_index": len(self.success_seeds) + 1,
+            "seed_id": getattr(seed, "id", None),
+            "parent_id": getattr(seed, "parent_id", None),
+            "stage": stage,
+            "round_index": round_index,
+            "elapsed_seconds": elapsed,
+            "baseline_evaluations_completed": self._baseline_evaluations,
+            "mutation_rounds_attempted": self._mutation_rounds_attempted,
+            "mutation_rounds_completed": self._mutation_rounds_completed,
+            "score": getattr(seed, "score", None),
+            "match_rate": (eval_result or {}).get("match_rate"),
+            "match_count": (eval_result or {}).get("match_count"),
+            "observation_rounds": (eval_result or {}).get("num_rounds"),
+            "mean_expected_latency":
+                (eval_result or {}).get("mean_expected_latency"),
+            "asm_path": getattr(seed, "asm_path", None),
+            "archive_path": archive_path,
+        }
+        self.success_seeds.append(seed)
+        # Attach the discovery record without changing the Seed contract.
+        seed.stage3_match_record = record
+        logger.info(
+            "Recorded match #{}, seed={}, elapsed={:.3f}s, "
+            "mutation_round={}".format(
+                record["match_index"], record["seed_id"], elapsed,
+                round_index if round_index is not None else "baseline"))
+
+    def _finalize_run_summary(self):
+        """Persist a machine-readable aggregate after the full budget."""
+        elapsed = max(0.0, time.time() - self._run_started_at)
+        records = [getattr(seed, "stage3_match_record", {})
+                   for seed in self.success_seeds]
+        completed_evaluations = (
+            self._baseline_evaluations + self._mutation_rounds_completed)
+        match_count = len(records)
+        first = records[0] if records else None
+        last = records[-1] if records else None
+        self.run_summary = {
+            "status": "match_found" if records else "no_match",
+            "budget": self.budget,
+            "baseline_evaluations_completed": self._baseline_evaluations,
+            "mutation_rounds_attempted": self._mutation_rounds_attempted,
+            "mutation_rounds_completed": self._mutation_rounds_completed,
+            "completed_evaluations": completed_evaluations,
+            "match_seed_count": match_count,
+            "match_rate_per_completed_evaluation": (
+                match_count / float(completed_evaluations)
+                if completed_evaluations else 0.0),
+            "matches_per_100_completed_evaluations": (
+                100.0 * match_count / float(completed_evaluations)
+                if completed_evaluations else 0.0),
+            "elapsed_seconds": elapsed,
+            "first_match": first,
+            "last_match": last,
+            "matches": records,
+            "failure_stats": dict(self.failure_stats),
+        }
+        summary_path = os.path.join(
+            self.work_dir, "stage3_match_summary.json")
+        try:
+            with open(summary_path, "w") as f:
+                json.dump(self.run_summary, f, indent=2, default=str,
+                          sort_keys=True)
+            logger.info("Stage 3 match summary: {}".format(summary_path))
+        except Exception as e:
+            logger.error("Cannot persist Stage 3 match summary: {}".format(e))
+
+        logger.info(
+            "Stage 3 aggregate: matches={}, completed_evaluations={}, "
+            "attempted_mutation_rounds={}/{}, elapsed={:.3f}s, "
+            "matches_per_100_evaluations={:.3f}".format(
+                match_count, completed_evaluations,
+                self._mutation_rounds_attempted, self.budget, elapsed,
+                self.run_summary[
+                    "matches_per_100_completed_evaluations"]))
 
     # =================================================================
     # 报告

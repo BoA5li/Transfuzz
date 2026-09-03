@@ -138,12 +138,14 @@ def main():
 
     controller = Stage3Controller(config)
     success_seed = controller.run(stage2_passed)
+    success_seeds = controller.success_seeds
 
     # 输出结果
     print("")
     print("=" * 60)
     if success_seed:
-        print("Stage 3 Result: SECRET RECOVERED!")
+        print("Stage 3 Result: SECRET RECOVERED ({} matches)!".format(
+            len(success_seeds)))
         print("=" * 60)
         print("  ID: {}".format(success_seed.id))
         print("  Score: {:.4f}".format(success_seed.score))
@@ -158,6 +160,25 @@ def main():
                 ed.get("match_rate", 0)))
             print("  Mean latency: {:.1f}".format(
                 ed.get("mean_expected_latency", 0)))
+
+        summary = controller.run_summary or {}
+        print("  Completed evaluations: {}".format(
+            summary.get("completed_evaluations", 0)))
+        print("  Mutation rounds attempted: {}/{}".format(
+            summary.get("mutation_rounds_attempted", 0),
+            summary.get("budget", args.budget)))
+        print("  Matches / 100 evaluations: {:.3f}".format(
+            summary.get("matches_per_100_completed_evaluations", 0.0)))
+        print("  Elapsed: {:.3f}s".format(
+            summary.get("elapsed_seconds", 0.0)))
+        print("")
+        print("  All match seeds:")
+        for matched in success_seeds:
+            rec = getattr(matched, "stage3_match_record", {})
+            print("    #{} seed={} stage={} round={} elapsed={:.3f}s asm={}".format(
+                rec.get("match_index"), rec.get("seed_id"),
+                rec.get("stage"), rec.get("round_index"),
+                rec.get("elapsed_seconds", 0.0), rec.get("asm_path")))
         
         # 打印最终配置
         if args.enable_config_mutation:

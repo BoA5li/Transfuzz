@@ -270,7 +270,8 @@ def run_pipeline(args):
             s2_passed_count=len(s2_passed))
         return PipelineOutcome(EXIT_FRAMEWORK_ERROR)
 
-    # 导出结果
+    # 导出代表性首个 match；完整 match 集合由 controller 写入
+    # stage3_match_summary.json。
     if success_seed:
         success_info = {
             "seed_id": success_seed.id,
@@ -297,7 +298,9 @@ def run_pipeline(args):
     logger.info("-" * 70)
     if success_seed:
         logger.info(
-            "PIPELINE: Stage 3 Result: SECRET RECOVERED!")
+            "PIPELINE: Stage 3 Result: SECRET RECOVERED "
+            "({} matches after full budget)!".format(
+                len(getattr(s3_ctrl, "success_seeds", [success_seed]))))
     else:
         logger.info(
             "PIPELINE: Stage 3 Result: FAILED - "
@@ -348,7 +351,9 @@ def _print_final_result(success, stopped_at, start_time,
     if stopped_at == "complete":
         if success and success_seed:
             ed = success_seed.eval_detail or {}
-            print("  Stage 3 (Secret Recovery):      MATCH FOUND")
+            summary = getattr(s3_ctrl, "run_summary", None) or {}
+            print("  Stage 3 (Secret Recovery):      {} MATCHES FOUND".format(
+                summary.get("match_seed_count", 1)))
             print("")
             print("  Success Seed:")
             print("    ID: {}".format(success_seed.id))
@@ -361,6 +366,17 @@ def _print_final_result(success, stopped_at, start_time,
                 success_seed.cross_stage_locked_pcs))
             print("    Stage 3 mutated PCs: {}".format(
                 success_seed.current_stage_mutated_pcs))
+            print("")
+            print("  Stage 3 Efficiency:")
+            print("    Completed evaluations: {}".format(
+                summary.get("completed_evaluations", 0)))
+            print("    Mutation rounds: {}/{}".format(
+                summary.get("mutation_rounds_attempted", 0),
+                summary.get("budget", 0)))
+            print("    Matches / 100 evaluations: {:.3f}".format(
+                summary.get("matches_per_100_completed_evaluations", 0.0)))
+            print("    Stage 3 elapsed: {:.3f}s".format(
+                summary.get("elapsed_seconds", 0.0)))
         else:
             print("  Stage 3 (Secret Recovery):      NO MATCH")
             if s3_ctrl:
