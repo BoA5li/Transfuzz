@@ -36,7 +36,6 @@ PROTECTION_CONFIG = {
         "pmu_read_uops",
         
         # Victim 框架 API
-        "vf_set_secret",
         "vf_run_attack_once",
         "vf_get_probe_addr_for_secret",
         "vf_prepare_probe_region",
