@@ -37,6 +37,25 @@ class Stage2DriverProtocolTests(unittest.TestCase):
         self.assertIn("total_t++;", self.source)
         self.assertIn("total_c++;", self.source)
 
+    def test_probe_region_is_prepared_once_before_measurement(self):
+        main_start = self.source.index("int main(int argc, char **argv)")
+        main_body = self.source[main_start:]
+        prepare = main_body.index("vf_prepare_probe_region(256);")
+        measure = main_body.index("stage2_round_dual(s0, trials")
+        self.assertLess(prepare, measure)
+        self.assertEqual(main_body.count("vf_prepare_probe_region(256);"), 1)
+
+    def test_round_has_no_dead_secret_parameter(self):
+        round_start = self.source.index("static int stage2_round_dual")
+        round_end = self.source.index("int main(int argc, char **argv)")
+        round_body = self.source[round_start:round_end]
+        self.assertNotIn("uint8_t secret", round_body)
+        self.assertNotIn("(void)secret", round_body)
+
+    def test_null_probe_address_is_rejected(self):
+        self.assertIn("if (probe_target == NULL) return -2;", self.source)
+        self.assertIn("detail=null_target_probe", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
