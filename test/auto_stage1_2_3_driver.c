@@ -161,18 +161,14 @@ static int stage2_control_trial(volatile uint8_t *probe_target)
     return probe_line_via_l1d_miss(probe_target);
 }
 
-/**
- * 在 secret = s 的条件下，对 target_s 做多次试验
- */
-static int stage2_round_dual(uint8_t secret,
-                              uint8_t target_s,
+/** Run paired target/control trials for the selected probe value. */
+static int stage2_round_dual(uint8_t target_s,
                               int trials,
                               int *out_hits_target,  int *out_total_target,
                               int *out_hits_control, int *out_total_control)
-{  
-    (void)secret;
-
+{
     volatile uint8_t *probe_target  = vf_get_probe_addr_for_secret(target_s);
+    if (probe_target == NULL) return -2;
 
     int hits_t = 0, total_t = 0;
     int hits_c = 0, total_c = 0;
@@ -222,10 +218,23 @@ int main(int argc, char **argv)
     int trials = 1000;
 
     uint8_t s0 = g_expected_secret;
+    /*
+     * Prepare the complete byte-indexed probe region once, before any PMU
+     * sample is collected.  This faults in and initializes victim-owned
+     * storage without biasing a trial: every target and control sample still
+     * flushes the measured line independently immediately before probing it.
+     */
+    vf_prepare_probe_region(256);
+
     int hits_t0, tot_t0, hits_c0, tot_c0;
-    if (stage2_round_dual(s0, s0, trials,
-                          &hits_t0, &tot_t0,
-                          &hits_c0, &tot_c0) != 0) {
+    int round_status = stage2_round_dual(s0, trials,
+                                         &hits_t0, &tot_t0,
+                                         &hits_c0, &tot_c0);
+    if (round_status == -2) {
+        printf("STAGE2_DRIVER_STATUS=ERROR detail=null_target_probe\n");
+        return 3;
+    }
+    if (round_status != 0) {
         printf("STAGE2_PMU_STATUS=ERROR detail=l1d_miss_read_failed\n");
         return 2;
     }
