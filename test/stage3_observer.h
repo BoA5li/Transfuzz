@@ -4,6 +4,9 @@
 
 #include <stdint.h>
 
+/* Fixed per-candidate Stage 3 observation budget. */
+#define STAGE3_DETECTION_ROUNDS 20
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,7 +20,7 @@ typedef enum {
 
 typedef struct {
     stage3_mode_t mode;
-    int rounds;              // 每个 secret 的观测轮数
+    int rounds;              // 兼容字段；observer 强制使用 STAGE3_DETECTION_ROUNDS
     int attack_repetitions;  // 每轮前触发多少次 vf_run_attack_once()
     int candidate_count;     // 默认 256
     int verbose;

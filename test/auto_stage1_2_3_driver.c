@@ -98,7 +98,7 @@ static void init_stage3_from_env(void)
 
     g_stage3_cfg.mode = mode;
     // ✅ 关键修订：所有配置参数从 env 读取，缺省时回退到默认值
-    g_stage3_cfg.rounds              = GET_ENV_INT("STAGE3_ROUNDS",          30);
+    g_stage3_cfg.rounds              = STAGE3_DETECTION_ROUNDS;
     g_stage3_cfg.attack_repetitions  = GET_ENV_INT("STAGE3_ATTACK_REPS",      1);
     g_stage3_cfg.candidate_count     = GET_ENV_INT("STAGE3_CANDIDATE_COUNT", 256);
     g_stage3_cfg.noise_range_start   = GET_ENV_INT("STAGE3_NOISE_START",      1);

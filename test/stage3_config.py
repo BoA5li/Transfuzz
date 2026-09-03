@@ -25,8 +25,14 @@ import logging
 logger = logging.getLogger("stage3_config")
 
 
+# Fixed Stage 3 observation budget.  This is deliberately not part of
+# STAGE3_PARAM_SPECS: changing the sample size while mutating a candidate
+# makes scores from different candidates incomparable.
+STAGE3_DETECTION_ROUNDS = 20
+
+
 # ====================================================================
-# 参数规格定义 (保持不变)
+# 可变异参数规格定义
 # ====================================================================
 
 STAGE3_PARAM_SPECS = {
@@ -44,13 +50,6 @@ STAGE3_PARAM_SPECS = {
             "AMD_Zen3": "通常 70-120",
             "Apple_M1": "通常 40-80",
         },
-    },
-    "rounds": {
-        "env_var": "STAGE3_ROUNDS",
-        "default": 100,
-        "range": [20, 500],
-        "step_choices": [-50, -20, -10, 10, 20, 50, 100],
-        "description": "flush-reload 总轮次，更多轮次提高信噪比但增加运行时间",
     },
     "attack_repetitions": {
         "env_var": "STAGE3_ATTACK_REPS",
@@ -251,6 +250,12 @@ def load_stage3_config(config_path):
         return get_stage3_defaults()
     with open(config_path, 'r') as f:
         config = json.load(f)
+    if "rounds" in config:
+        logger.warning(
+            "Ignoring legacy mutable Stage 3 config field 'rounds'; "
+            "detection always uses {} rounds".format(
+                STAGE3_DETECTION_ROUNDS))
+        config.pop("rounds", None)
     logger.info("Loaded Stage 3 config from {}".format(config_path))
     return config
 
@@ -262,7 +267,7 @@ def get_stage3_defaults():
 
 def generate_stage3_env(config):
     """将 Stage 3 配置转换为环境变量字典。"""
-    env = {}
+    env = {"STAGE3_ROUNDS": str(STAGE3_DETECTION_ROUNDS)}
     for key, spec in STAGE3_PARAM_SPECS.items():
         env_var = spec.get("env_var")
         if env_var and key in config:
