@@ -431,9 +431,9 @@ def test_03_protection():
     t.check(checker.is_protected(p, base_ctx),
             "call printf 受保护")
 
-    p = parse_asm_line("\tcall vf_set_secret\n")
+    p = parse_asm_line("\tcall vf_run_attack_once\n")
     t.check(checker.is_protected(p, base_ctx),
-            "call vf_set_secret 受保护")
+            "call vf_run_attack_once 受保护")
 
     # 非保护的 call
     p = parse_asm_line("\tcall some_user_func\n")
