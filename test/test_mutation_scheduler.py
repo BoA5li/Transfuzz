@@ -606,9 +606,11 @@ def test_05_mutation_operators():
 
     # --- insert_nop_before ---
     result = MutationOperators.insert_nop_before(p, {})
-    t.check(len(result) == 2, "insert_nop_before 返回 2 行")
-    t.check("nop" in result[0], "第一行是 nop")
-    t.check("mov" in result[1], "第二行是原指令")
+    t.check(2 <= len(result) <= 5,
+            "insert_nop_before 返回 1~4 条 nop 加原指令")
+    t.check(all("nop" in line for line in result[:-1]),
+            "原指令前的所有行都是 nop")
+    t.check("mov" in result[-1], "最后一行是原指令")
 
     # --- insert_nop_after ---
     result = MutationOperators.insert_nop_after(p, {})
@@ -690,13 +692,32 @@ def test_05_mutation_operators():
     # --- mutate_comparison_swap ---
     p_cmp = parse_asm_line("\tcmp -8(%rbp), %rax\n")
     result = MutationOperators.mutate_comparison_swap(p_cmp, {})
-    t.check(len(result) == 1 and "test" in result[0],
-            "cmp 变异为 test: {}".format(result[0].strip()))
+    swapped_cmp = parse_asm_line(result[0] + "\n")
+    t.check(len(result) == 1 and swapped_cmp["mnemonic"] == "cmp",
+            "cmp 操作数交换时保持助记符: {}".format(result[0].strip()))
+    t.check(swapped_cmp["operands"] == ["%rax", "-8(%rbp)"],
+            "cmp 操作数已交换: {}".format(result[0].strip()))
 
     p_test = parse_asm_line("\ttest %rax, %rbx\n")
     result = MutationOperators.mutate_comparison_swap(p_test, {})
-    t.check(len(result) == 1 and "cmp" in result[0],
-            "test 变异为 cmp: {}".format(result[0].strip()))
+    swapped_test = parse_asm_line(result[0] + "\n")
+    t.check(len(result) == 1 and swapped_test["mnemonic"] == "test",
+            "test 操作数交换时保持助记符: {}".format(result[0].strip()))
+    t.check(swapped_test["operands"] == ["%rbx", "%rax"],
+            "test 操作数已交换: {}".format(result[0].strip()))
+
+    p_cmp_imm = parse_asm_line("\tcmp $1, %rax\n")
+    result = MutationOperators.mutate_comparison_swap(p_cmp_imm, {})
+    t.check(result == [p_cmp_imm["raw"].rstrip('\n')],
+            "立即数源操作数不交换，避免生成非法目标操作数")
+
+    # --- replace_comparison_opcode ---
+    result = MutationOperators.replace_comparison_opcode(p_cmp, {})
+    t.check(parse_asm_line(result[0] + "\n")["mnemonic"] == "test",
+            "replace_comparison_opcode 负责 cmp -> test")
+    result = MutationOperators.replace_comparison_opcode(p_test, {})
+    t.check(parse_asm_line(result[0] + "\n")["mnemonic"] == "cmp",
+            "replace_comparison_opcode 负责 test -> cmp")
 
     # --- replace_with_random_instruction ---
     result = MutationOperators.replace_with_random_instruction(p, {})
