@@ -39,9 +39,9 @@ typedef struct {
 } stage3_result_t;
 
 /* victim PoC 侧最小接口 */
-void vf_set_secret(uint8_t s);
 void vf_run_attack_once(void);
 volatile uint8_t *vf_get_probe_addr_for_secret(uint8_t s);
+void vf_prepare_probe_region(int candidate_count);
 
 /* observer 统一接口 */
 const char *stage3_mode_to_string(stage3_mode_t mode);
