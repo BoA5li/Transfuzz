@@ -117,8 +117,7 @@ class Stage2PmuPreflightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work_dir, \
                 mock.patch.object(
                     stage2_controller, "run_stage2_pmu_preflight",
-                    return_value=failure), \
-                mock.patch.object(controller, "_precompile_stage3_obj") as precompile:
+                    return_value=failure):
             controller.work_dir = work_dir
             passed = controller.run([])
 
@@ -126,7 +125,7 @@ class Stage2PmuPreflightTests(unittest.TestCase):
         self.assertEqual(controller.framework_error,
                          "perf_event permission denied")
         self.assertEqual(controller.failure_stats["l1d_pmu_unavailable"], 1)
-        precompile.assert_not_called()
+        self.assertFalse(hasattr(controller, "_precompile_stage3_obj"))
 
     @staticmethod
     def _healthy_preflight():
@@ -165,8 +164,7 @@ class Stage2PmuPreflightTests(unittest.TestCase):
                 controller.framework_error = "L1D PMU runtime read failed"
                 return None
 
-            with mock.patch.object(controller, "_precompile_stage3_obj"), \
-                    mock.patch.object(
+            with mock.patch.object(
                         controller, "_evaluate_seed",
                         side_effect=fail_framework) as evaluate:
                 passed = controller.run(seeds)
@@ -184,8 +182,7 @@ class Stage2PmuPreflightTests(unittest.TestCase):
             def fail_first_round(round_idx):
                 controller.framework_error = "L1D PMU runtime read failed"
 
-            with mock.patch.object(controller, "_precompile_stage3_obj"), \
-                    mock.patch.object(
+            with mock.patch.object(
                         controller, "_evaluate_seed",
                         return_value=self._valid_evaluation()), \
                     mock.patch.object(
