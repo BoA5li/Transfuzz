@@ -6,9 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <x86intrin.h>
+#ifndef STAGE2_ONLY
 #include "stage3_observer.h"
+#endif
 
+#ifndef STAGE2_ONLY
 void stage3_init_runtime_params_from_env(void);
+#endif
 
 // Victim PoC 接口
 void vf_run_attack_once(void);
@@ -37,10 +41,6 @@ static int probe_line_via_l1d_miss(volatile uint8_t *addr) {
     uint64_t delta = m1 - m0;
     return (delta == 0);  // 1 = hit, 0 = miss
 }
-
-static int stage3_enabled = 0;
-static stage3_config_t g_stage3_cfg;
-
 
 /* ✅ 新增：全局变量保存秘密值（从环境变量读取） */
 static uint8_t g_expected_secret = 0;
@@ -75,6 +75,10 @@ static void init_expected_secret_from_env(void)
     _v; \
 })
 
+
+#ifndef STAGE2_ONLY
+static int stage3_enabled = 0;
+static stage3_config_t g_stage3_cfg;
 
 static void init_stage3_from_env(void)
 {
@@ -135,6 +139,7 @@ static int run_stage3_only(int round_idx, uint8_t expected_secret)
     print_stage3_round_result(round_idx, &r);
     return 0;
 }
+#endif
 
 static inline void stage2_probe_wait(void)
 {
@@ -211,7 +216,9 @@ int main(int argc, char **argv)
     (void)argc; (void)argv;
 
     init_expected_secret_from_env();
+#ifndef STAGE2_ONLY
     init_stage3_from_env();
+#endif
 
     int trials = 1000;
 
@@ -223,9 +230,11 @@ int main(int argc, char **argv)
      * predictor/cache warm-up and substantial timing overhead to every Stage
      * 3 seed evaluation.  Stage 2 mode retains the original paired protocol.
      */
+#ifndef STAGE2_ONLY
     if (stage3_enabled) {
         return run_stage3_only(0, s0) == 0 ? 0 : 4;
     }
+#endif
 
     /*
      * Prepare the complete byte-indexed probe region once, before any Stage 2
