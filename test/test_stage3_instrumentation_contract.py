@@ -2,8 +2,11 @@
 """Stage 3 preprocessing and driver isolation regression tests."""
 
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -67,7 +70,7 @@ class Stage3InstrumentationContractTests(unittest.TestCase):
         self.assertEqual(
             source, self.controller._remove_stage1_instrumentation(source))
 
-    def test_stage3_driver_bypasses_stage2_pmu_sampling(self):
+    def test_stage3_driver_compiles_out_stage2_pmu_sampling(self):
         base = os.path.dirname(os.path.abspath(__file__))
         with open(os.path.join(base, "auto_stage1_2_3_driver.c")) as stream:
             driver = stream.read()
@@ -79,6 +82,39 @@ class Stage3InstrumentationContractTests(unittest.TestCase):
         self.assertLess(stage3_gate, stage2_sample)
         gate_body = driver[stage3_gate:prepare]
         self.assertIn("return run_stage3_only", gate_body)
+        self.assertIn("#ifndef STAGE3_ONLY", driver)
+        self.assertIn("#ifdef STAGE3_ONLY", driver)
+
+    def test_stage3_build_excludes_prior_stage_pmu_objects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            victim = os.path.join(directory, "victim.s")
+            driver = os.path.join(directory, "driver.c")
+            observer = os.path.join(directory, "stage3.o")
+            for path in (victim, driver, observer):
+                open(path, "w").close()
+
+            controller = Stage3Controller.__new__(Stage3Controller)
+            controller.cc = "cc"
+            controller.driver_c = driver
+            controller.stage3_obj = observer
+            controller.compile_timeout = 20
+            controller.failure_stats = {
+                "compile_failed": 0, "compile_timeout": 0,
+            }
+            completed = subprocess.CompletedProcess([], 0, b"", b"")
+            with mock.patch("stage3_controller.subprocess.run",
+                            return_value=completed) as run:
+                controller._compile_stage3(victim, directory, "test")
+
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertIn("-DSTAGE3_ONLY", commands[1])
+            self.assertEqual(
+                ["cc", commands[0][-1], commands[1][-1], observer,
+                 "-o", os.path.join(directory, "stage3_exe")],
+                commands[2])
+            flattened_link = " ".join(commands[2])
+            self.assertNotIn("pmu_helper", flattened_link)
+            self.assertNotIn("pmu_uops", flattened_link)
 
     def test_pmu_constructor_skips_opening_events_in_stage3_mode(self):
         base = os.path.dirname(os.path.abspath(__file__))
