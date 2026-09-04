@@ -91,9 +91,6 @@ static void init_stage3_from_env(void)
     g_stage3_cfg.attack_repetitions = 1;
     g_stage3_cfg.candidate_count = 256;
     g_stage3_cfg.verbose = 0;
-    g_stage3_cfg.noise_range_start = 1;
-    g_stage3_cfg.noise_range_end = 16;
-
     stage3_enabled = 1;
 }
 
