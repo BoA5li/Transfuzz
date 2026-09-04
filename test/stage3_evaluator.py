@@ -191,6 +191,13 @@ def validate_stage3_latency_dump(
         if any(record["expected"] not in (0, 1)
                for record in round_records.values()):
             return [], "invalid_expected_flag:round={}".format(round_idx)
+        noise_candidates = sorted(
+            candidate_idx for candidate_idx, record in round_records.items()
+            if record["noise"] != 0)
+        if noise_candidates:
+            return [], (
+                "invalid_candidate_noise_marker:round={}:candidates={}"
+                .format(round_idx, noise_candidates))
 
         expected_latencies.append(
             round_records[expected_secret]["latency"])
