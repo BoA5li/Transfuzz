@@ -310,8 +310,16 @@ __attribute__((constructor))
 static void pmu_init(void)
 {
     const char *stage3_only = getenv("ENABLE_STAGE3");
+    const char *pmu_stage = getenv("TRANSFUZZ_PMU_STAGE");
     if (stage3_only != NULL && strcmp(stage3_only, "1") == 0) {
         /* Stage 3 uses timestamped Flush+Reload, not Stage 1 or Stage 2 PMU. */
+        return;
+    }
+
+    if (pmu_stage != NULL && strcmp(pmu_stage, "2") == 0) {
+        /* Stage 2 owns only the L1D event.  Do not reserve or multiplex a
+         * Stage 1 counter in the cache-encoding measurement process. */
+        fd_l1d_miss = setup_l1d_miss_event();
         return;
     }
 
@@ -334,7 +342,10 @@ static void pmu_init(void)
             RAW_BR_MISP_COND, "BR_MISP_RETIRED.CONDITIONAL");
         fd_stage1_selected = fd_stage1;
     }
-    fd_l1d_miss = setup_l1d_miss_event();
+    if (pmu_stage == NULL || strcmp(pmu_stage, "1") != 0) {
+        /* Legacy/unscoped callers retain the combined helper behaviour. */
+        fd_l1d_miss = setup_l1d_miss_event();
+    }
 }
 
 __attribute__((destructor))
