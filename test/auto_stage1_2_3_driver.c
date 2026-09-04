@@ -101,18 +101,15 @@ static void init_stage3_from_env(void)
     g_stage3_cfg.rounds              = STAGE3_DETECTION_ROUNDS;
     g_stage3_cfg.attack_repetitions  = GET_ENV_INT("STAGE3_ATTACK_REPS",      1);
     g_stage3_cfg.candidate_count     = STAGE3_DETECTION_CANDIDATES;
-    g_stage3_cfg.noise_range_start   = GET_ENV_INT("STAGE3_NOISE_START",      1);
-    g_stage3_cfg.noise_range_end     = GET_ENV_INT("STAGE3_NOISE_END",       16);
     g_stage3_cfg.verbose             = GET_ENV_INT("STAGE3_VERBOSE",          0);
 
     stage3_enabled = 1;
     fprintf(stderr,
         "[driver] Stage3 ENABLED, mode=%s, rounds=%d, reps=%d, "
-        "candidates=%d, noise=[%d,%d]\n",
+        "candidates=%d, candidate_filter=none\n",
         mode_s,
         g_stage3_cfg.rounds, g_stage3_cfg.attack_repetitions,
-        g_stage3_cfg.candidate_count,
-        g_stage3_cfg.noise_range_start, g_stage3_cfg.noise_range_end);
+        g_stage3_cfg.candidate_count);
     stage3_init_runtime_params_from_env();
 }
 
