@@ -247,16 +247,6 @@ STAGE3_DEFAULT_CONFIG = {
         "choices": [1, 2, 3, 5, 10],
         "description": "每轮攻击重复次数",
     },
-    "noise_range_start": {
-        "default": 1,
-        "choices": [0, 1, 2],
-        "description": "噪声过滤起始候选值",
-    },
-    "noise_range_end": {
-        "default": 16,
-        "choices": [8, 16, 32, 48],
-        "description": "噪声过滤结束候选值",
-    },
     "use_poc_permutation": {
         "default": 1,
         "choices": [0, 1],
@@ -320,8 +310,6 @@ def generate_stage3_env(config):
         "cache_hit_threshold": "STAGE3_CACHE_HIT_THRESHOLD",
         "probe_stride": "STAGE3_PROBE_STRIDE",
         "attack_repetitions": "STAGE3_ATTACK_REPS",
-        "noise_range_start": "STAGE3_NOISE_START",
-        "noise_range_end": "STAGE3_NOISE_END",
         "use_poc_permutation": "STAGE3_USE_PERMUTATION",
         "flush_wait_cycles": "STAGE3_FLUSH_WAIT",
         "reload_wait_cycles": "STAGE3_RELOAD_WAIT",
