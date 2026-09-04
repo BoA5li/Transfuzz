@@ -183,7 +183,6 @@ def run_pipeline(args):
 
     s2_config = {
         "driver_c": args.driver_c,         # Stage2Controller 使用 driver_c
-        "stage3_driver_c": args.stage3_driver_c,
         "budget": args.s2_budget,
         "pool_size": args.s2_pool_size,
         "anchors_json": args.anchors_json,
