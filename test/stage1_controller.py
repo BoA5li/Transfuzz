@@ -944,11 +944,14 @@ class Stage1Controller(object):
         start_time = time.time()
         
         try:
+            env = os.environ.copy()
+            env["TRANSFUZZ_PMU_STAGE"] = "1"
             # 启动进程
             proc = subprocess.Popen(
                 [exe_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
                 preexec_fn=os.setsid  # ← 创建新进程组，便于批量杀死
             )
             
