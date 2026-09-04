@@ -168,11 +168,6 @@ class Stage3Controller(object):
         self.budget = config.get("budget", 1000)
         self.work_dir = _abs(config.get("work_dir", "./stage3_work"))
         self.cc = config.get("cc", "gcc")
-        self.pmu_helper_obj = _abs(config.get(
-            "pmu_helper_obj", "pmu_helper_auto.o"))
-        self.pmu_uops_obj = _abs(config.get(
-            "pmu_uops_obj", "pmu_uops_rdpmc.o"))
-
         # 超时配置
         self.run_timeout = config.get("run_timeout", 20)
         self.compile_timeout = config.get("compile_timeout", 20)
@@ -318,13 +313,7 @@ class Stage3Controller(object):
                 self.driver_c))
             ok = False
 
-        # 3. pmu_helper_obj
-        if not os.path.exists(self.pmu_helper_obj):
-            logger.error("Sanity: pmu_helper_obj not found: {}".format(
-                self.pmu_helper_obj))
-            ok = False
-
-        # 4. stage3_driver_c (warning, 不致命)
+        # 3. stage3_driver_c (warning, 不致命)
         if not os.path.exists(self.stage3_driver_c):
             logger.warning("Sanity: stage3_driver_c not found: {}".format(
                 self.stage3_driver_c))
@@ -1175,7 +1164,8 @@ class Stage3Controller(object):
         # Step 2: 编译 driver
         try:
             r2 = subprocess.run(
-                [self.cc, "-c", "-O0", self.driver_c, "-o", driver_o],
+                [self.cc, "-c", "-O0", "-DSTAGE3_ONLY",
+                 self.driver_c, "-o", driver_o],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 timeout=self.compile_timeout)
         except subprocess.TimeoutExpired:
@@ -1194,11 +1184,9 @@ class Stage3Controller(object):
             return None
 
         # Step 3: 链接
-        link_cmd = [self.cc, victim_o, driver_o, self.pmu_helper_obj]
+        link_cmd = [self.cc, victim_o, driver_o]
         if self.stage3_obj and os.path.exists(self.stage3_obj):
             link_cmd.append(self.stage3_obj)
-        if (self.pmu_uops_obj and os.path.exists(self.pmu_uops_obj)):
-            link_cmd.append(self.pmu_uops_obj)
         link_cmd += ["-o", exe_path]
 
         try:
@@ -1588,9 +1576,8 @@ class Stage3Controller(object):
                         "  metadata.json        : full provenance\n\n"
                         "Reproduce (rough):\n"
                         "  gcc -c victim_processed.s -o victim.o\n"
-                        "  gcc -c -O0 <driver_c> -o driver.o\n"
-                        "  gcc victim.o driver.o <pmu_helper_obj> "
-                        "[<stage3_obj>] [<pmu_uops_obj>] -o stage3_exe\n"
+                        "  gcc -c -O0 -DSTAGE3_ONLY <driver_c> -o driver.o\n"
+                        "  gcc victim.o driver.o <stage3_obj> -o stage3_exe\n"
                         "  ENABLE_STAGE3=1 STAGE3_MODE=flush-reload "
                         "VF_EXPECTED_SECRET={sec_x} "
                         "<+ env from stage3_config.json> ./stage3_exe\n"
