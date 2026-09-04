@@ -19,7 +19,8 @@ void vf_run_attack_once(void);
 volatile uint8_t *vf_get_probe_addr_for_secret(uint8_t s);
 void vf_prepare_probe_region(int candidate_count);
 
-// pmu_helper 接口
+#ifndef STAGE3_ONLY
+// Stage 2 PMU helper interface
 int pmu_read_l1d_miss_checked(uint64_t *value, int *error_number);
 
 static inline void flush_line(volatile uint8_t *addr) {
@@ -41,6 +42,7 @@ static int probe_line_via_l1d_miss(volatile uint8_t *addr) {
     uint64_t delta = m1 - m0;
     return (delta == 0);  // 1 = hit, 0 = miss
 }
+#endif
 
 /* ✅ 新增：全局变量保存秘密值（从环境变量读取） */
 static uint8_t g_expected_secret = 0;
@@ -138,9 +140,11 @@ static int run_stage3_only(int round_idx, uint8_t expected_secret)
     }
     print_stage3_round_result(round_idx, &r);
     return 0;
+#endif
 }
 #endif
 
+#ifndef STAGE3_ONLY
 static inline void stage2_probe_wait(void)
 {
     for (volatile int z = 0; z < 100; z++) {}
@@ -210,6 +214,7 @@ static int stage2_round_dual(uint8_t target_s,
     *out_total_control = total_c;
     return 0;
 }
+#endif
 
 int main(int argc, char **argv)
 {
@@ -219,8 +224,6 @@ int main(int argc, char **argv)
 #ifndef STAGE2_ONLY
     init_stage3_from_env();
 #endif
-
-    int trials = 1000;
 
     uint8_t s0 = g_expected_secret;
     /*
@@ -235,6 +238,12 @@ int main(int argc, char **argv)
         return run_stage3_only(0, s0) == 0 ? 0 : 4;
     }
 #endif
+
+#ifdef STAGE3_ONLY
+    fprintf(stderr, "[driver] Stage 3 required but ENABLE_STAGE3 is not 1\\n");
+    return 5;
+#else
+    int trials = 1000;
 
     /*
      * Prepare the complete byte-indexed probe region once, before any Stage 2
