@@ -251,8 +251,6 @@ def run_pipeline(args):
         "strong_objects_json": args.strong_objects_json,
         "work_dir": str(work_dir / "stage3"),
         "cc": args.gcc,
-        "pmu_helper_obj": args.pmu_helper_obj,
-        "pmu_uops_obj": args.pmu_uops_obj,
         "dump_times": args.dump_times,
         "expected_secret": expected_secret_byte,
     }
