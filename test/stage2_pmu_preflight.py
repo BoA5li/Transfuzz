@@ -64,9 +64,11 @@ def run_stage2_pmu_preflight(cc, pmu_helper_obj, work_dir,
         return result
 
     try:
+        probe_env = os.environ.copy()
+        probe_env["TRANSFUZZ_PMU_STAGE"] = "2"
         probed = subprocess.run(
             [probe_exe], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=run_timeout)
+            timeout=run_timeout, env=probe_env)
     except (OSError, subprocess.TimeoutExpired) as exc:
         result["reason"] = "L1D PMU preflight execution failed: {}".format(exc)
         return result
