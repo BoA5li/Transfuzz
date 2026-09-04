@@ -36,11 +36,6 @@ def main():
                     default="auto_stage1_2_3_driver.c")
     ap.add_argument("--stage3-driver-c",
                     default="stage3_driver_safe.c")
-    ap.add_argument("--pmu-helper-obj",
-                    default="pmu_helper_auto.o")
-    ap.add_argument("--pmu-uops-obj",
-                    default="pmu_uops_rdpmc.o")
-
     ap.add_argument("--budget", type=int, default=1000)
     ap.add_argument("--pool-size", type=int, default=200)
     ap.add_argument("--anchors-json", default=None)
@@ -119,8 +114,6 @@ def main():
         "strong_objects_json": args.strong_objects_json,
         "work_dir": args.work_dir,
         "cc": args.gcc,
-        "pmu_helper_obj": args.pmu_helper_obj,
-        "pmu_uops_obj": args.pmu_uops_obj,
         "run_timeout": args.run_timeout,
         "report_interval": args.report_interval,
         "dump_times": args.dump_times,
