@@ -45,7 +45,6 @@ class Stage2Controller(object):
             return p
 
         self.driver_c = _abs(config.get("driver_c", "auto_stage1_2_3_driver.c"))
-        self.stage3_driver_c = _abs(config.get("stage3_driver_c", "stage3_driver_safe.c"))
 
         self.budget = config.get("budget", 1000)
         self.work_dir = _abs(config.get("work_dir", "./stage2_work"))
@@ -80,10 +79,6 @@ class Stage2Controller(object):
 
         self.pmu_preflight_results = config.get("pmu_preflight_results")
 
-        # Precompile only after PMU preflight, so initialization work cannot
-        # precede the measurement-validity gate in standalone Stage 2 runs.
-        self.stage3_obj = os.path.join(self.work_dir, "stage3_driver_safe.o")
-
         # anchors
         self.anchors = []
         self.strong_objects = []
@@ -116,33 +111,6 @@ class Stage2Controller(object):
         logger.info("Stage 2 Controller initialized:")
         logger.info("  budget={}, run_timeout={}s, compile_timeout={}s".format(
             self.budget, self.run_timeout, self.compile_timeout))
-
-    def _precompile_stage3_obj(self):
-        """预编译 stage3_driver_safe.c → .o"""
-        os.makedirs(self.work_dir, exist_ok=True)
-
-        if not os.path.exists(self.stage3_driver_c):
-            logger.warning("stage3_driver_safe.c not found: {}".format(
-                self.stage3_driver_c))
-            self.stage3_obj = None
-            return
-
-        try:
-            r = subprocess.run(
-                [self.cc, "-c", "-O0", self.stage3_driver_c, "-o", self.stage3_obj],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                timeout=self.compile_timeout
-            )
-            if r.returncode != 0:
-                logger.warning("stage3_driver_safe.c compile failed: {}".format(
-                    r.stderr.decode("utf-8", errors="ignore")[:300]))
-                self.stage3_obj = None
-            else:
-                logger.info("Pre-compiled stage3_driver_safe.o: {}".format(
-                    self.stage3_obj))
-        except subprocess.TimeoutExpired:
-            logger.warning("stage3_driver_safe.c compile timeout")
-            self.stage3_obj = None
 
     # =========================================================
     # 主流程
@@ -191,8 +159,6 @@ class Stage2Controller(object):
             "(zero is a valid successful read)".format(
                 preflight.get("event"), preflight.get("raw_event"),
                 preflight.get("value")))
-
-        self._precompile_stage3_obj()
 
         # Stage 1 passed → Stage 2 种子
         stage2_seeds = []
@@ -857,7 +823,8 @@ class Stage2Controller(object):
         # ============================================================
         try:
             r2 = subprocess.run(
-                [self.cc, "-c", "-O0", self.driver_c, "-o", driver_o],
+                [self.cc, "-c", "-O0", "-DSTAGE2_ONLY",
+                 self.driver_c, "-o", driver_o],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 timeout=self.compile_timeout)
         except subprocess.TimeoutExpired:
@@ -880,10 +847,6 @@ class Stage2Controller(object):
         # Step 3: 链接（带超时）
         # ============================================================
         link_cmd = [self.cc, victim_o, driver_o, self.pmu_helper_obj]
-
-        # stage3_driver_safe.o
-        if self.stage3_obj and os.path.exists(self.stage3_obj):
-            link_cmd.append(self.stage3_obj)
 
         link_cmd += ["-o", exe_path]
 
@@ -931,6 +894,7 @@ class Stage2Controller(object):
             env = os.environ.copy()
             env.pop("ENABLE_STAGE3", None)
             env.pop("STAGE3_MODE", None)
+            env["TRANSFUZZ_PMU_STAGE"] = "2"
             env["VF_EXPECTED_SECRET"] = str(self.expected_secret)
             # 启动进程
             proc = subprocess.Popen(
