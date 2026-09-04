@@ -7,6 +7,9 @@
 /* Fixed per-candidate Stage 3 observation budget. */
 #define STAGE3_DETECTION_ROUNDS 20
 
+/* Complete uint8_t domain: candidate indices 0 through 255. */
+#define STAGE3_DETECTION_CANDIDATES 256
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,7 +25,7 @@ typedef struct {
     stage3_mode_t mode;
     int rounds;              // 兼容字段；observer 强制使用 STAGE3_DETECTION_ROUNDS
     int attack_repetitions;  // 每轮前触发多少次 vf_run_attack_once()
-    int candidate_count;     // 默认 256
+    int candidate_count;     // 兼容字段；observer 强制扫描全部 256 个字节值
     int verbose;
     int noise_range_start;   // 需要排除的噪声项起始索引
     int noise_range_end;     // 需要排除的噪声项结束索引

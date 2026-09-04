@@ -3,8 +3,8 @@
 // Safe version (runtime-configurable):
 //   - DOES NOT call vf_set_secret()
 //   - Reuses current secret state prepared by Stage2
-//   - Key parameters now read from environment variables at startup,
-//     so Python-side mutation can take effect without recompilation.
+//   - Detection rounds and byte-domain size are fixed for comparability;
+//     remaining tunable parameters are read from environment variables.
 
 #include <stdio.h>
 #include <stdint.h>
@@ -19,6 +19,10 @@
 
 #ifndef STAGE3_MAX_CANDIDATES
 #define STAGE3_MAX_CANDIDATES 256
+#endif
+
+#if STAGE3_DETECTION_CANDIDATES > STAGE3_MAX_CANDIDATES
+#error "fixed Stage 3 candidate domain exceeds backend storage"
 #endif
 
 // 编译期默认值（仅作为 env 缺省时的回退）
@@ -258,9 +262,8 @@ static int stage3_backend_flush_reload_reuse_secret(
     if (!cfg || !out) return -1;
     stage3_result_zero(out);
 
-    candidate_count = cfg->candidate_count;
-    if (candidate_count <= 0 || candidate_count > STAGE3_MAX_CANDIDATES)
-        candidate_count = STAGE3_MAX_CANDIDATES;
+    /* Scan the complete uint8_t domain for every candidate. */
+    candidate_count = STAGE3_DETECTION_CANDIDATES;
 
     /* Keep the observation budget identical for every candidate. */
     rounds = STAGE3_DETECTION_ROUNDS;

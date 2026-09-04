@@ -97,10 +97,10 @@ static void init_stage3_from_env(void)
     }
 
     g_stage3_cfg.mode = mode;
-    // ✅ 关键修订：所有配置参数从 env 读取，缺省时回退到默认值
+    // 检测规模固定；其余可调参数从 env 读取并回退到默认值。
     g_stage3_cfg.rounds              = STAGE3_DETECTION_ROUNDS;
     g_stage3_cfg.attack_repetitions  = GET_ENV_INT("STAGE3_ATTACK_REPS",      1);
-    g_stage3_cfg.candidate_count     = GET_ENV_INT("STAGE3_CANDIDATE_COUNT", 256);
+    g_stage3_cfg.candidate_count     = STAGE3_DETECTION_CANDIDATES;
     g_stage3_cfg.noise_range_start   = GET_ENV_INT("STAGE3_NOISE_START",      1);
     g_stage3_cfg.noise_range_end     = GET_ENV_INT("STAGE3_NOISE_END",       16);
     g_stage3_cfg.verbose             = GET_ENV_INT("STAGE3_VERBOSE",          0);

@@ -26,10 +26,11 @@ logger = logging.getLogger("stage3_config")
 
 # Detection-sample size is an experimental constant, not a mutation axis.
 STAGE3_DETECTION_ROUNDS = 20
+STAGE3_DETECTION_CANDIDATES = 256
 
 
 # ====================================================================
-# 参数规格定义 (保持不变)
+# 可变异参数规格定义
 # ====================================================================
 
 STAGE3_PARAM_SPECS = {
@@ -53,12 +54,6 @@ STAGE3_PARAM_SPECS = {
         "default": 1,
         "choices": [1, 2, 3, 5, 10],
         "description": "每轮 flush 后攻击重复次数，增加可提高信号但可能引入噪声",
-    },
-    "candidate_count": {
-        "env_var": "STAGE3_CANDIDATE_COUNT",
-        "default": 256,
-        "choices": [64, 128, 256],
-        "description": "候选值数量（通常 256 = 一个字节的所有可能值）",
     },
     "noise_range_start": {
         "env_var": "STAGE3_NOISE_START",
@@ -269,7 +264,10 @@ def get_stage3_defaults():
 
 def generate_stage3_env(config):
     """将 Stage 3 配置转换为环境变量字典。"""
-    env = {"STAGE3_ROUNDS": str(STAGE3_DETECTION_ROUNDS)}
+    env = {
+        "STAGE3_ROUNDS": str(STAGE3_DETECTION_ROUNDS),
+        "STAGE3_CANDIDATE_COUNT": str(STAGE3_DETECTION_CANDIDATES),
+    }
     for key, spec in STAGE3_PARAM_SPECS.items():
         env_var = spec.get("env_var")
         if env_var and key in config:

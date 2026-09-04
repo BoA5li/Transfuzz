@@ -228,6 +228,7 @@ RSB_STACK_PATTERNS = [
 # ====================================================================
 
 STAGE3_DETECTION_ROUNDS = 20
+STAGE3_DETECTION_CANDIDATES = 256
 
 STAGE3_DEFAULT_CONFIG = {
     "cache_hit_threshold": {
@@ -245,11 +246,6 @@ STAGE3_DEFAULT_CONFIG = {
         "default": 1,
         "choices": [1, 2, 3, 5, 10],
         "description": "每轮攻击重复次数",
-    },
-    "candidate_count": {
-        "default": 256,
-        "choices": [64, 128, 256],
-        "description": "候选值数量",
     },
     "noise_range_start": {
         "default": 1,
@@ -324,14 +320,16 @@ def generate_stage3_env(config):
         "cache_hit_threshold": "STAGE3_CACHE_HIT_THRESHOLD",
         "probe_stride": "STAGE3_PROBE_STRIDE",
         "attack_repetitions": "STAGE3_ATTACK_REPS",
-        "candidate_count": "STAGE3_CANDIDATE_COUNT",
         "noise_range_start": "STAGE3_NOISE_START",
         "noise_range_end": "STAGE3_NOISE_END",
         "use_poc_permutation": "STAGE3_USE_PERMUTATION",
         "flush_wait_cycles": "STAGE3_FLUSH_WAIT",
         "reload_wait_cycles": "STAGE3_RELOAD_WAIT",
     }
-    env = {"STAGE3_ROUNDS": str(STAGE3_DETECTION_ROUNDS)}
+    env = {
+        "STAGE3_ROUNDS": str(STAGE3_DETECTION_ROUNDS),
+        "STAGE3_CANDIDATE_COUNT": str(STAGE3_DETECTION_CANDIDATES),
+    }
     for key, env_var in env_map.items():
         if key in config:
             env[env_var] = str(config[key])
