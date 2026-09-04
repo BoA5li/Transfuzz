@@ -140,7 +140,6 @@ static int run_stage3_only(int round_idx, uint8_t expected_secret)
     }
     print_stage3_round_result(round_idx, &r);
     return 0;
-#endif
 }
 #endif
 
@@ -240,7 +239,7 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef STAGE3_ONLY
-    fprintf(stderr, "[driver] Stage 3 required but ENABLE_STAGE3 is not 1\\n");
+    fprintf(stderr, "[driver] Stage 3 required but ENABLE_STAGE3 is not 1\n");
     return 5;
 #else
     int trials = 1000;
@@ -286,4 +285,5 @@ int main(int argc, char **argv)
            (unsigned)s0, (unsigned)s0, (unsigned)s0, r0_t, r0_c);
 
     return 0;
+#endif
 }
