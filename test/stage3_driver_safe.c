@@ -54,6 +54,7 @@ static int g_cache_hit_threshold = STAGE3_DEFAULT_CACHE_HIT_THRESHOLD;
 static int g_use_poc_permutation = STAGE3_DEFAULT_USE_POC_PERMUTATION;
 static int g_flush_wait_cycles   = STAGE3_DEFAULT_FLUSH_WAIT;
 static int g_reload_wait_cycles  = STAGE3_DEFAULT_RELOAD_WAIT;
+static int g_stage3_dump_times   = 0;
 
 // 供外部调用，从环境变量读取运行时参数
 void stage3_init_runtime_params_from_env(void)
@@ -75,12 +76,15 @@ void stage3_init_runtime_params_from_env(void)
         int v = atoi(s);
         if (v >= 0) g_reload_wait_cycles = v;
     }
+    if ((s = getenv("STAGE3_DUMP_TIMES")) && s[0]) {
+        g_stage3_dump_times = atoi(s) == 1 ? 1 : 0;
+    }
 
     fprintf(stderr,
         "[stage3] runtime params: cache_hit_threshold=%d, use_perm=%d, "
-        "flush_wait=%d, reload_wait=%d\n",
+        "flush_wait=%d, reload_wait=%d, dump_times=%d\n",
         g_cache_hit_threshold, g_use_poc_permutation,
-        g_flush_wait_cycles, g_reload_wait_cycles);
+        g_flush_wait_cycles, g_reload_wait_cycles, g_stage3_dump_times);
 }
 
 // =====================================================================
@@ -109,7 +113,6 @@ static inline void stage3_busy_wait(int cycles) {
 }
 
 // debug flags
-volatile int g_stage3_dump_times = 0;
 volatile int g_stage3_dump_order = 0;
 volatile int g_stage3_dump_round_summary = 1;
 

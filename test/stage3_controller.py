@@ -32,6 +32,7 @@ import logging
 import random
 import time
 import traceback
+import tempfile
 
 from seed_pool import Seed, SeedPool
 from mutation_scheduler import MutationScheduler
@@ -45,6 +46,8 @@ from stage3_config import (
     get_stage3_defaults,
     generate_stage3_env,
     print_stage3_config,
+    STAGE3_DETECTION_ROUNDS,
+    STAGE3_DETECTION_CANDIDATES,
 )
 
 logger = logging.getLogger("stage3")
@@ -491,6 +494,13 @@ class Stage3Controller(object):
         logger.info("ASM mutation: {}".format(
             "ENABLED" if self.enable_asm_mutation else "DISABLED"))
 
+        if self.dump_times != 1:
+            logger.error(
+                "Stage 3 latency scoring requires dump_times=1; got {}"
+                .format(self.dump_times))
+            self.framework_error = "stage3 latency dump is disabled"
+            return None
+
         # Sanity check
         if not self._sanity_check():
             logger.error("Sanity check FAILED, aborting Stage 3")
@@ -547,6 +557,14 @@ class Stage3Controller(object):
                 logger.warning(
                     "Baseline eval failed for seed {}".format(seed.id))
                 continue
+
+            if eval_result.get("framework_error"):
+                self.framework_error = eval_result.get(
+                    "detail", "invalid stage3 latency data")
+                logger.error(
+                    "Stage 3 measurement validation failed: {}".format(
+                        self.framework_error))
+                return None
 
             self._baseline_evaluations += 1
 
@@ -620,6 +638,12 @@ class Stage3Controller(object):
                         eval_result=round_result["seed"].eval_detail,
                         stage="mutation_round_{}".format(round_idx),
                         round_index=round_idx)
+
+            if self.framework_error:
+                logger.error(
+                    "Stage 3 stopped after measurement validation failure: {}"
+                    .format(self.framework_error))
+                return None
 
             if (round_idx + 1) % self.report_interval == 0:
                 self._report_stats(round_idx + 1)
@@ -835,6 +859,15 @@ class Stage3Controller(object):
             self._unbind_seed_config(mutant_seed)
             return None
 
+        if eval_result.get("framework_error"):
+            logger.error(
+                "Round {}: invalid Stage 3 measurement data: {}".format(
+                    round_idx, eval_result.get("detail")))
+            if mutant_path != seed.asm_path:
+                self._cleanup_mutant(mutant_path)
+            self._unbind_seed_config(mutant_seed)
+            return None
+
         mutant_seed.score = eval_result["score"]
         mutant_seed.eval_detail = eval_result
 
@@ -925,7 +958,15 @@ class Stage3Controller(object):
             if log_lines is None:
                 return None
 
-            result = stage3_evaluate(log_lines)
+            result = stage3_evaluate(
+                log_lines,
+                expected_secret=self.expected_secret,
+                expected_latency_rounds=STAGE3_DETECTION_ROUNDS,
+                expected_candidate_count=STAGE3_DETECTION_CANDIDATES)
+            if result.get("framework_error"):
+                self.failure_stats["eval_exception"] += 1
+                self.framework_error = result.get(
+                    "detail", "invalid stage3 latency data")
             # 把实际生效的配置挂到评测结果上, 后续 archive / metadata 复用
             if isinstance(result, dict):
                 result["stage3_config_used"] = stage3_cfg
@@ -1201,6 +1242,7 @@ class Stage3Controller(object):
         env["ENABLE_STAGE3"] = "1"
         env["STAGE3_MODE"] = "flush-reload"
         env["VF_EXPECTED_SECRET"] = str(self.expected_secret)
+        env["STAGE3_DUMP_TIMES"] = "1"
 
         # ---- 关键: 把变异后的 stage3 配置注入子进程 env ----
         cfg_env = {}
@@ -1233,10 +1275,15 @@ class Stage3Controller(object):
 
         start_time = time.time()
         proc = None
+        stdout_capture = None
         try:
+            # A complete timing dump is intentionally large (20 x 256 rows).
+            # A pipe can fill before poll() observes process exit, so capture
+            # stdout in a file and read it only after the child terminates.
+            stdout_capture = tempfile.TemporaryFile(mode="w+b")
             proc = subprocess.Popen(
                 [exe_path],
-                stdout=subprocess.PIPE,
+                stdout=stdout_capture,
                 stderr=subprocess.PIPE,
                 env=env,
                 preexec_fn=os.setsid,
@@ -1271,7 +1318,9 @@ class Stage3Controller(object):
                 rc = proc.poll()
                 if rc is not None:
                     try:
-                        stdout, stderr = proc.communicate()
+                        _, stderr = proc.communicate()
+                        stdout_capture.seek(0)
+                        stdout = stdout_capture.read()
                     except Exception as e:
                         logger.debug(
                             "[{}] communicate() error: {}".format(tag, e))
@@ -1338,6 +1387,8 @@ class Stage3Controller(object):
         finally:
             if proc is not None:
                 _ACTIVE_CHILD_PIDS.discard(proc.pid)
+            if stdout_capture is not None:
+                stdout_capture.close()
 
     def _kill_proc_group(self, proc, tag):
         """SIGTERM -> wait 1s -> SIGKILL 双阶段终止"""
