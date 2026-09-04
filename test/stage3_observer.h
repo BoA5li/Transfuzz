@@ -27,9 +27,6 @@ typedef struct {
     int attack_repetitions;  // 每轮前触发多少次 vf_run_attack_once()
     int candidate_count;     // 兼容字段；observer 强制扫描全部 256 个字节值
     int verbose;
-    int noise_range_start;   // 需要排除的噪声项起始索引
-    int noise_range_end;     // 需要排除的噪声项结束索引
-
     // Stage3 不持有 secret，而是外部传入
     const uint8_t *secrets;
     int secret_count;
