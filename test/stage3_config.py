@@ -55,18 +55,6 @@ STAGE3_PARAM_SPECS = {
         "choices": [1, 2, 3, 5, 10],
         "description": "每轮 flush 后攻击重复次数，增加可提高信号但可能引入噪声",
     },
-    "noise_range_start": {
-        "env_var": "STAGE3_NOISE_START",
-        "default": 1,
-        "choices": [0, 1, 2],
-        "description": "噪声过滤起始候选值（排除 kernel/prefetch 干扰的低值区）",
-    },
-    "noise_range_end": {
-        "env_var": "STAGE3_NOISE_END",
-        "default": 16,
-        "choices": [8, 16, 32, 48],
-        "description": "噪声过滤结束候选值",
-    },
     "use_poc_permutation": {
         "env_var": "STAGE3_USE_PERMUTATION",
         "default": 1,
